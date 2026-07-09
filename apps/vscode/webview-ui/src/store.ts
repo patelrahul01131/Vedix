@@ -4,6 +4,7 @@ import { vscode } from './utilities/vscode';
 interface Message {
   role: 'user' | 'agent' | 'activity';
   text: string;
+  sources?: Array<{title: string, url: string, snippet?: string, domain: string}>;
 }
 
 export interface AgentActivity {

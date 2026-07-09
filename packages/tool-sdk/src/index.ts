@@ -4,6 +4,7 @@ export * from './tools/UpdateFileTool';
 export * from './tools/ReadFileTool';
 export * from './tools/DeleteFileTool';
 export * from './tools/TerminalTool';
+export * from './tools/WebSearchTool';
 export * from './tools/GitTool';
 export * from './tools/SemanticSearchTool';
 export * from './tools/WorkspaceTreeTool';

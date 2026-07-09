@@ -24,6 +24,7 @@ model Message {
   content     String?  
   toolCalls   String?  // JSON stringified array of tool calls
   toolResults String?  // JSON stringified array of tool results
+  sources     String?  // JSON stringified array of sources
   missionId   String
   mission     Mission  @relation(fields: [missionId], references: [id], onDelete: Cascade)
   createdAt   DateTime @default(now())

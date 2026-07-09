@@ -88,9 +88,15 @@ server.register(async function (fastify) {
                   }
                 } catch(e) {}
               }
-              return { role: m.role, text: text };
+              let sources = undefined;
+              if ((m as any).sources) {
+                try {
+                  sources = JSON.parse((m as any).sources);
+                } catch(e) {}
+              }
+              return { role: m.role, text: text, sources: sources };
             });
-            const cleaned = formatted.filter(m => !(m.role === 'agent' && (!m.text || m.text.trim() === '')));
+            const cleaned = formatted.filter((m: any) => !(m.role === 'agent' && (!m.text || typeof m.text !== 'string' || m.text.trim() === '')));
             connection.socket.send(JSON.stringify({ type: 'sessionMessages', payload: cleaned }));
           }
         }

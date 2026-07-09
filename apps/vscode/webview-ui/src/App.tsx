@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, memo } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
@@ -6,6 +6,17 @@ import 'highlight.js/styles/vs2015.css';
 import { useAgentStore } from './store';
 import { vscode } from './utilities/vscode';
 import './App.css';
+
+const markdownRemarkPlugins = [remarkGfm];
+const markdownRehypePlugins = [rehypeHighlight];
+const markdownComponents = {
+  a: ({node, ...props}: any) => <a {...props} target="_blank" rel="noreferrer" />,
+  table: ({node, ...props}: any) => (
+    <div className="table-wrapper">
+      <table {...props} />
+    </div>
+  )
+};
 
 const ProviderIcon = ({ model }: { model: string }) => {
   const provider = model.split(':')[0];
@@ -134,6 +145,94 @@ const PermissionCard = ({ toolName, toolArgs, isResolved, isRejected, onApprove,
   );
 };
 
+const MessageItem = memo(({ msg, isLast, nextMsg, openActivityId, setOpenActivityId, sendMessage, openSourcesModal }: any) => {
+  if (msg.isActivityGroup) {
+    const acts = msg.activities;
+    return (
+      <div className="message agent status-card">
+        <div className="activities-container">
+          <div className="worked-for">Worked for {acts.length} steps</div>
+          {acts.map((act: any) => (
+            <div key={act.id} className="activity-item">
+              <div 
+                className="activity-header" 
+                onClick={() => act.details && setOpenActivityId(openActivityId === act.id ? null : act.id)}
+                style={{ cursor: act.details ? 'pointer' : 'default' }}
+              >
+                <span className="activity-icon">
+                  {act.type === 'think' ? '🧠' : '🔧'}
+                </span>
+                <span className="activity-title">{act.title}</span>
+                {act.status === 'running' && <div className="spinner-small" />}
+                {act.details && <span className={`chevron ${openActivityId === act.id ? 'open' : ''}`}>›</span>}
+              </div>
+              {openActivityId === act.id && act.details && (
+                <div className="activity-details">
+                  <pre>{act.details}</pre>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  const isPermission = msg.role === 'agent' && msg.text.startsWith('PERMISSION_REQUIRED:');
+  let toolName = '';
+  let toolArgs: any = {};
+  
+  if (isPermission) {
+    const match = msg.text.match(/Tool '([^']+)' wants to run with args ([\s\S]*)/);
+    if (match) {
+      toolName = match[1];
+      try {
+        toolArgs = JSON.parse(match[2]);
+      } catch (e) { }
+    }
+  }
+  const isError = msg.text.startsWith('Error');
+  
+  return (
+    <div className={`message ${msg.role} ${isError ? 'error-message' : ''}`}>
+      <div className="message-bubble">
+        {isPermission ? (
+          <PermissionCard 
+            toolName={toolName} 
+            toolArgs={toolArgs} 
+            isResolved={!isLast}
+            isRejected={!isLast && nextMsg?.text === 'Decline'}
+            onApprove={() => sendMessage('Approve')}
+            onReject={() => sendMessage('Decline')}
+          />
+        ) : msg.role === 'agent' ? (
+          <ReactMarkdown 
+            remarkPlugins={markdownRemarkPlugins} 
+            rehypePlugins={markdownRehypePlugins}
+            components={markdownComponents}
+          >
+            {msg.text}
+          </ReactMarkdown>
+        ) : (
+          msg.text
+        )}
+        {msg.sources && msg.sources.length > 0 && (
+          <div className="message-sources-pill" onClick={() => openSourcesModal(msg.sources)}>
+            <div className="sources-icons">
+              {msg.sources.slice(0, 3).map((s: any, idx: number) => (
+                <div key={idx} className="source-icon">
+                  <img src={`https://www.google.com/s2/favicons?domain=${s.domain}&sz=32`} alt={s.domain} />
+                </div>
+              ))}
+            </div>
+            <span>{msg.sources.length} sources</span>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+});
+
 function App() {
   const [input, setInput] = useState('')
   const [showHistory, setShowHistory] = useState(false)
@@ -142,6 +241,7 @@ function App() {
   const [editTitle, setEditTitle] = useState('')
   const [openActivityId, setOpenActivityId] = useState<string | null>(null)
   const [workspaceFiles, setWorkspaceFiles] = useState<string[]>([])
+  const [openSourcesModal, setOpenSourcesModal] = useState<any[] | null>(null)
   
   const [isModelDropdownOpen, setModelDropdownOpen] = useState(false);
   const modelRef = useRef<HTMLDivElement>(null);
@@ -335,78 +435,18 @@ function App() {
               groupedMessages.push({ isActivityGroup: true, activities: currentGroup });
             }
 
-            return groupedMessages.map((msg: any, i) => {
-              if (msg.isActivityGroup) {
-                const acts = msg.activities;
-                return (
-                  <div key={`group-${i}`} className="message agent status-card">
-                    <div className="activities-container">
-                      <div className="worked-for">Worked for {acts.length} steps</div>
-                      {acts.map((act: any) => (
-                        <div key={act.id} className="activity-item">
-                          <div 
-                            className="activity-header" 
-                            onClick={() => act.details && setOpenActivityId(openActivityId === act.id ? null : act.id)}
-                            style={{ cursor: act.details ? 'pointer' : 'default' }}
-                          >
-                            <span className="activity-icon">
-                              {act.type === 'think' ? '🧠' : '🔧'}
-                            </span>
-                            <span className="activity-title">{act.title}</span>
-                            {act.status === 'running' && <div className="spinner-small" />}
-                            {act.details && <span className={`chevron ${openActivityId === act.id ? 'open' : ''}`}>›</span>}
-                          </div>
-                          {openActivityId === act.id && act.details && (
-                            <div className="activity-details">
-                              <pre>{act.details}</pre>
-                            </div>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                );
-              }
-
-              // Normal Message Parsing
-            // Parse permission requests
-            const isPermission = msg.role === 'agent' && msg.text.startsWith('PERMISSION_REQUIRED:');
-            let toolName = '';
-            let toolArgs: any = {};
-            
-            if (isPermission) {
-              const match = msg.text.match(/Tool '([^']+)' wants to run with args ([\s\S]*)/);
-              if (match) {
-                toolName = match[1];
-                try {
-                  toolArgs = JSON.parse(match[2]);
-                } catch (e) { }
-              }
-            }
-            const isError = msg.text.startsWith('Error');
-            return (
-              <div key={i} className={`message ${msg.role} ${isError ? 'error-message' : ''}`}>
-                <div className="message-bubble">
-                  {isPermission ? (
-                    <PermissionCard 
-                      toolName={toolName} 
-                      toolArgs={toolArgs} 
-                      isResolved={i < groupedMessages.length - 1}
-                      isRejected={i < groupedMessages.length - 1 && groupedMessages[i + 1]?.text === 'Decline'}
-                      onApprove={() => sendMessage('Approve')}
-                      onReject={() => sendMessage('Decline')}
-                    />
-                  ) : msg.role === 'agent' ? (
-                    <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeHighlight]}>
-                      {msg.text}
-                    </ReactMarkdown>
-                  ) : (
-                    msg.text
-                  )}
-                </div>
-              </div>
-            );
-          });
+            return groupedMessages.map((msg: any, i) => (
+              <MessageItem 
+                key={msg.isActivityGroup ? `group-${i}` : i}
+                msg={msg}
+                isLast={i === groupedMessages.length - 1}
+                nextMsg={groupedMessages[i + 1]}
+                openActivityId={openActivityId}
+                setOpenActivityId={setOpenActivityId}
+                sendMessage={sendMessage}
+                openSourcesModal={setOpenSourcesModal}
+              />
+            ));
           })()
         )}
 
@@ -430,17 +470,10 @@ function App() {
           <div className="message agent">
             <div className="message-bubble">
               <ReactMarkdown 
-                rehypePlugins={[rehypeHighlight]}
-                components={{
-                  a: ({node, ...props}) => <a {...props} target="_blank" rel="noreferrer" />,
-                  table: ({node, ...props}) => (
-                    <div className="table-wrapper">
-                      <table {...props} />
-                    </div>
-                  )
-                }}
+                remarkPlugins={markdownRemarkPlugins}
+                components={markdownComponents}
               >
-                {streamingText}
+                {streamingText + '\n'}
               </ReactMarkdown>
             </div>
           </div>
@@ -562,6 +595,32 @@ function App() {
           </div>
         </div>
       </footer>
+      
+      {openSourcesModal && (
+        <div className="sources-modal-overlay" onClick={() => setOpenSourcesModal(null)}>
+          <div className="sources-modal" onClick={e => e.stopPropagation()}>
+            <div className="sources-modal-header">
+              <h3>{openSourcesModal.length} sources</h3>
+              <button className="close-btn" onClick={() => setOpenSourcesModal(null)}>✕</button>
+            </div>
+            <div className="sources-modal-content">
+              <p className="sources-modal-subtitle">Sources for your search</p>
+              <div className="sources-list">
+                {openSourcesModal.map((s: any, idx: number) => (
+                  <a key={idx} href={s.url} target="_blank" rel="noopener noreferrer" className="source-item">
+                    <div className="source-item-header">
+                      <img src={`https://www.google.com/s2/favicons?domain=${s.domain}&sz=32`} alt={s.domain} className="source-item-icon" />
+                      <span className="source-item-domain">{s.domain}</span>
+                    </div>
+                    <div className="source-item-title">{s.title}</div>
+                    <div className="source-item-snippet">{s.content || s.snippet}</div>
+                  </a>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
