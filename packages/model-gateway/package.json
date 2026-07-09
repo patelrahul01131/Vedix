@@ -1,0 +1,23 @@
+{
+  "name": "@vedix/model-gateway",
+  "version": "1.0.0",
+  "private": true,
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc -w"
+  },
+  "dependencies": {
+    "@ai-sdk/google": "^4.0.9",
+    "@ai-sdk/mistral": "^4.0.5",
+    "@ai-sdk/openai": "latest",
+    "@vedix/tool-sdk": "workspace:*",
+    "ai": "latest",
+    "ollama-ai-provider": "^1.2.0",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0"
+  }
+}

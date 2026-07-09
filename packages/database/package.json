@@ -1,0 +1,24 @@
+{
+  "name": "@vedix/database",
+  "version": "1.0.0",
+  "private": true,
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc -w",
+    "lint": "eslint src/",
+    "db:push": "prisma db push",
+    "db:generate": "prisma generate",
+    "db:studio": "prisma studio",
+    "db:reset": "tsx src/resetDB.ts"
+  },
+  "dependencies": {
+    "@prisma/client": "^5.0.0",
+    "vectordb": "^0.11.0"
+  },
+  "devDependencies": {
+    "prisma": "^5.0.0",
+    "typescript": "^5.0.0"
+  }
+}

@@ -1,0 +1,32 @@
+version: "3.8"
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: vedix-postgres
+    environment:
+      POSTGRES_USER: vedix_user
+      POSTGRES_PASSWORD: vedix_password
+      POSTGRES_DB: vedix
+    ports:
+      - "5433:5432"
+    volumes:
+      - vedix-pg-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U vedix_user -d vedix"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: vedix-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - vedix-redis-data:/data
+    command: redis-server --appendonly yes
+
+volumes:
+  vedix-pg-data:
+  vedix-redis-data:

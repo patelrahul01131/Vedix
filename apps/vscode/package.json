@@ -1,0 +1,54 @@
+{
+  "name": "vedix-vscode",
+  "displayName": "Vedix Agent",
+  "description": "An autonomous AI coding agent right inside your IDE.",
+  "version": "1.0.0",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Machine Learning",
+    "Other"
+  ],
+  "activationEvents": [],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "vedix.start",
+        "title": "Vedix: Start Chat"
+      }
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "vedix-view-container",
+          "title": "Vedix",
+          "icon": "resources/icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "vedix-view-container": [
+        {
+          "type": "webview",
+          "id": "vedix.chatView",
+          "name": "Vedix Chat"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "pnpm run compile",
+    "compile": "tsc -p ./",
+    "build": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "dev": "tsc -watch -p ./",
+    "build:webview": "cd webview-ui && pnpm run build"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.85.0",
+    "@types/node": "20.x",
+    "typescript": "^5.3.3"
+  }
+}

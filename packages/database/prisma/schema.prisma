@@ -1,0 +1,44 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Mission {
+  id            String    @id @default(uuid())
+  title         String
+  status        String    @default("Idle")
+  workingMemory String    @default("")
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  messages      Message[]
+}
+
+model Message {
+  id          String   @id @default(uuid())
+  parentId    String?
+  role        String   // 'user', 'assistant', 'tool', 'system'
+  content     String?  
+  toolCalls   String?  // JSON stringified array of tool calls
+  toolResults String?  // JSON stringified array of tool results
+  missionId   String
+  mission     Mission  @relation(fields: [missionId], references: [id], onDelete: Cascade)
+  createdAt   DateTime @default(now())
+}
+
+model Memory {
+  id        String   @id @default(uuid())
+  key       String
+  value     String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model AgentState {
+  id        String   @id @default("global_state")
+  status    String   @default("Offline")
+  updatedAt DateTime @updatedAt
+}

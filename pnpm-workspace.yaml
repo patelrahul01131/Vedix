@@ -1,0 +1,6 @@
+packages:
+  - "apps/*"
+  - "apps/vscode/*"
+  - "services/*"
+  - "packages/*"
+  - "agents/*"

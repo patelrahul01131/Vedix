@@ -1,0 +1,228 @@
+import 'dotenv/config';
+import fastify from 'fastify';
+import cors from '@fastify/cors';
+import websocket from '@fastify/websocket';
+import { EventBus } from './EventBus';
+import { MissionPlanner } from './Planner';
+import { logger } from './logger';
+import { db } from '@vedix/database';
+
+const server = fastify({ logger: true });
+
+server.register(cors, { origin: '*' });
+server.register(websocket);
+
+// Initialize our mock event bus and planner
+const eventBus = new EventBus();
+const planner = new MissionPlanner(eventBus);
+
+server.register(async function (fastify) {
+  fastify.get('/ws', { websocket: true }, (connection, req) => {
+    server.log.info('Client connected to WebSockets');
+
+    // Forward events from the EventBus to the WebSocket client
+    const onAgentStatus = (status: string) => {
+      connection.socket.send(JSON.stringify({ type: 'status', payload: status }));
+    };
+    
+    const onAgentMessage = (message: any) => {
+      connection.socket.send(JSON.stringify({ type: 'message', payload: message }));
+    };
+
+    const onDebugData = (data: any) => {
+      connection.socket.send(JSON.stringify({ type: 'debugData', payload: data }));
+    };
+
+    const onSessionSwitched = async (id: string) => {
+      connection.socket.send(JSON.stringify({ type: 'sessionSwitched', payload: id }));
+      // Also update the list of sessions
+      const sessions = await db.mission.findMany({ orderBy: { updatedAt: 'desc' } });
+      connection.socket.send(JSON.stringify({ type: 'sessionsList', payload: sessions }));
+    };
+
+    eventBus.on('status', onAgentStatus);
+    eventBus.on('message', onAgentMessage);
+    eventBus.on('debugData', onDebugData);
+    eventBus.on('sessionSwitched', onSessionSwitched);
+    
+    const onToken = (token: string) => {
+      connection.socket.send(JSON.stringify({ type: 'token', payload: token }));
+    };
+    
+    const onActivity = (activity: any) => {
+      connection.socket.send(JSON.stringify({ type: 'activity', payload: activity }));
+    };
+
+    eventBus.on('token', onToken);
+    eventBus.on('activity', onActivity);
+
+    connection.socket.on('message', async (message: any) => {
+      try {
+        const data = JSON.parse(message.toString());
+        server.log.info(`Received from client: ${JSON.stringify(data)}`);
+        
+        if (data.command === 'getSessions') {
+          const sessions = await db.mission.findMany({ orderBy: { updatedAt: 'desc' } });
+          connection.socket.send(JSON.stringify({ type: 'sessionsList', payload: sessions }));
+        }
+
+        if (data.command === 'createSession') {
+          const newSession = await db.mission.create({ data: { title: 'New Conversation' } });
+          const sessions = await db.mission.findMany({ orderBy: { updatedAt: 'desc' } });
+          connection.socket.send(JSON.stringify({ type: 'sessionsList', payload: sessions }));
+          // Auto-select the newly created session
+          connection.socket.send(JSON.stringify({ type: 'sessionSwitched', payload: newSession.id }));
+        }
+
+        if (data.command === 'getSessionMessages') {
+          if (data.sessionId) {
+            const dbMsgs = await db.message.findMany({ where: { missionId: data.sessionId }, orderBy: { createdAt: 'asc' } });
+            const formatted = dbMsgs.map(m => {
+              let text = m.content;
+              if (m.role === 'agent' && typeof text === 'string' && (text.startsWith('[') || text.startsWith('{'))) {
+                try {
+                  const parsed = JSON.parse(text);
+                  if (Array.isArray(parsed)) {
+                    const textParts = parsed.filter((p: any) => p.type === 'text').map((p: any) => p.text);
+                    text = textParts.join('\n');
+                  }
+                } catch(e) {}
+              }
+              return { role: m.role, text: text };
+            });
+            const cleaned = formatted.filter(m => !(m.role === 'agent' && (!m.text || m.text.trim() === '')));
+            connection.socket.send(JSON.stringify({ type: 'sessionMessages', payload: cleaned }));
+          }
+        }
+
+        if (data.command === 'updateSessionTitle') {
+          if (data.sessionId && data.title) {
+            await db.mission.update({ where: { id: data.sessionId }, data: { title: data.title } });
+            const sessions = await db.mission.findMany({ orderBy: { updatedAt: 'desc' } });
+            connection.socket.send(JSON.stringify({ type: 'sessionsList', payload: sessions }));
+          }
+        }
+
+        if (data.command === 'deleteSession') {
+          if (data.sessionId) {
+            await db.mission.delete({ where: { id: data.sessionId } });
+            const sessions = await db.mission.findMany({ orderBy: { updatedAt: 'desc' } });
+            connection.socket.send(JSON.stringify({ type: 'sessionsList', payload: sessions }));
+          }
+        }
+
+        if (data.command === 'getModels') {
+          const models = [
+            // OpenRouter
+            'openrouter:qwen/qwen3-next-80b-a3b-instruct:free',
+            'openrouter:poolside/laguna-m.1:free',
+            'openrouter:cohere/north-mini-code:free',
+            'openrouter:nvidia/nemotron-3-super-120b-a12b:free',
+            'openrouter:openai/gpt-oss-120b:free',
+            'openrouter:meta-llama/llama-3.3-70b-instruct:free',
+            'openrouter:google/gemma-4-31b-it:free',
+            // DeepSeek
+            'deepseek:deepseek-chat', // DeepSeek-V4
+            'deepseek:deepseek-reasoner', // DeepSeek-R1
+            // Gemini
+            'gemini:gemini-2.5-flash',
+            'gemini:gemini-3-flash',
+            'gemini:gemini-3.5-flash',
+            'gemini:gemini-3-pro',
+            'gemini:gemini-2.5-pro',
+            // GitHub
+            'github:gpt-4o',
+            'github:gpt-4o-mini',
+            'github:gpt-4.1',
+            'github:gpt-4.1-mini',
+            'github:phi-4-mini',
+            'github:phi-3.5-moe',
+            'github:phi-3.5-vision',
+            'github:llama-3.3',
+            'github:llama-4-scout-109b',
+            'github:llama-4-maverick-402b',
+            'github:deepseek-v4',
+            'github:deepseek-v4-flash',
+            'github:mistral-small-4',
+            'github:mistral-large-2',
+            'github:codestral',
+            'github:gemma-4-31b',
+            'github:gemma-4-26b-moe',
+            'github:command-r-plus',
+            'github:command-a-plus',
+            // Ollama
+            'ollama:gpt-oss:20b-cloud',
+            'ollama:gpt-oss:120b-cloud',
+            'ollama:minimax-m2:cloud',
+            'ollama:glm-4.7:cloud',
+            // Groq
+            'groq:llama-3.1-8b-instant',
+            'groq:llama-3.3-70b-versatile',
+            'groq:openai/gpt-oss-120b',
+            'groq:openai/gpt-oss-20b',
+            'groq:qwen/qwen3-32b',
+            'groq:meta-llama/llama-4-scout-17b-16e-instruct',
+            'groq:openai/gpt-oss-safeguard-20b',
+            // Mistral
+            'mistral:mistral-medium-3-5',
+            'mistral:mistral-small-2603',
+            'mistral:devstral-2512',
+            'mistral:mistral-large-2512',
+            'mistral:ministral-14b-2512',
+            'mistral:ministral-8b-2512',
+            'mistral:ministral-3b-2512',
+            'mistral:codestral-2508'
+          ];
+          connection.socket.send(JSON.stringify({ type: 'modelsList', payload: models }));
+        }
+
+        if (data.command === 'sendMessage') {
+          // Pass the dynamic model to the planner if provided
+          if (data.model) {
+             planner.gateway.modelName = data.model; // Hacky but works for demo
+          }
+          if (data.workspaceRoot) {
+            process.env.WORKSPACE_ROOT = data.workspaceRoot;
+          }
+
+          if (data.text.toLowerCase() === 'approve') {
+            planner.resolveApproval(true);
+          } else if (data.text.toLowerCase() === 'decline') {
+            planner.resolveApproval(false);
+          } else {
+            planner.planMission(data.text, data.sessionId).catch(err => server.log.error(err));
+          }
+        }
+      } catch (err) {
+        server.log.error('Failed to parse WebSocket message');
+      }
+    });
+
+    connection.socket.on('close', () => {
+      server.log.info('Client disconnected');
+      eventBus.off('status', onAgentStatus);
+      eventBus.off('message', onAgentMessage);
+      eventBus.off('debugData', onDebugData);
+      eventBus.off('sessionSwitched', onSessionSwitched);
+      eventBus.off('token', onToken);
+      eventBus.off('activity', onActivity);
+    });
+  });
+});
+
+server.get('/health', async (request, reply) => {
+  return { status: 'ok', service: 'vedix-backend' };
+});
+
+const start = async () => {
+  try {
+    await server.listen({ port: 3001, host: '0.0.0.0' });
+    logger.info('Vedix Backend is running on http://localhost:3001');
+    logger.info('WebSocket listening on ws://localhost:3001/ws');
+  } catch (err) {
+    logger.error(err);
+    process.exit(1);
+  }
+};
+
+start();

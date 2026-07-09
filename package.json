@@ -1,0 +1,23 @@
+{
+  "name": "vedix-monorepo",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Vedix Engineering Platform",
+  "packageManager": "pnpm@9.0.0",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "scripts": {
+    "build": "turbo run build",
+    "dev": "turbo run dev",
+    "lint": "turbo run lint",
+    "test": "turbo run test"
+  },
+  "devDependencies": {
+    "eslint": "^8.0.0",
+    "prettier": "^3.0.0",
+    "turbo": "^2.0.0",
+    "typescript": "^5.0.0",
+    "vitest": "^4.1.10"
+  }
+}
