@@ -307,6 +307,11 @@ function App() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false)
+  const [newApiKey, setNewApiKey] = useState('')
+  const [localApiKey, setLocalApiKey] = useState((window as any).API_KEY || '');
+  const maskedKey = localApiKey ? `${localApiKey.substring(0, 4)}...${localApiKey.substring(localApiKey.length - 4)}` : '';
+
   useEffect(() => {
     connect()
 
@@ -315,6 +320,16 @@ function App() {
       const message = event.data;
       if (message.command === 'workspaceFiles') {
         setWorkspaceFiles(message.payload || []);
+      } else if (message.command === 'apiKeyUpdated') {
+        (window as any).API_KEY = message.payload;
+        setLocalApiKey(message.payload);
+        setIsSettingsOpen(false);
+        if (!message.payload) {
+          useAgentStore.getState().clearData();
+        } else {
+          // Force reconnect only if there is an API key
+          useAgentStore.getState().connect();
+        }
       }
     };
     window.addEventListener('message', handleMessage);
@@ -336,14 +351,60 @@ function App() {
       <header className="vedix-header">
         <div className="header-left">
           <strong>Vedix</strong>
-          <span className="status-badge">{status}</span>
+          <span className="status-badge" title={status}>
+            {status.startsWith('Error') ? 'Error' : status}
+          </span>
         </div>
         <div className="header-right">
           <button title="New Session" className="icon-button" onClick={() => createSession()}>➕</button>
           <button title="History" className="icon-button" onClick={() => setShowHistory(!showHistory)}>🕒</button>
-          <button title="Settings" className="icon-button">⚙️</button>
+          <button title="Settings" className="icon-button" onClick={() => setIsSettingsOpen(!isSettingsOpen)}>⚙️</button>
         </div>
       </header>
+
+      {isSettingsOpen && (
+        <div className="settings-overlay">
+          <div className="settings-header">
+            <h3>Settings</h3>
+            <button className="icon-button" onClick={() => setIsSettingsOpen(false)}>❌</button>
+          </div>
+          <div className="settings-content">
+            <div className="settings-section">
+              <h4>API Key</h4>
+              {localApiKey ? (
+                <div className="api-key-display">
+                  <span>{maskedKey}</span>
+                  <button className="secondary-btn" onClick={() => vscode.postMessage({ command: 'logout' })}>Remove</button>
+                </div>
+              ) : (
+                <div className="api-key-input-container">
+                  <input 
+                    type="password" 
+                    placeholder="Enter your API Key..." 
+                    value={newApiKey}
+                    onChange={(e) => setNewApiKey(e.target.value)}
+                    className="api-key-input"
+                  />
+                  <button 
+                    className="primary-btn" 
+                    onClick={() => vscode.postMessage({ command: 'saveApiKey', text: newApiKey })}
+                    disabled={!newApiKey}
+                  >
+                    Save Key
+                  </button>
+                </div>
+              )}
+            </div>
+            {localApiKey && (
+              <div className="settings-section" style={{marginTop: '20px'}}>
+                <button className="danger-btn" style={{width: '100%', padding: '10px'}} onClick={() => vscode.postMessage({ command: 'logout' })}>
+                  Logout (Clear API Key)
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {showHistory && (
         <div className="history-drawer">
@@ -402,6 +463,16 @@ function App() {
       )}
 
       <main className="vedix-chat-area" ref={chatAreaRef} onScroll={handleScroll}>
+        {status.startsWith('Error') && (
+          <div className="error-banner">
+            <span className="error-icon">⚠️</span>
+            <p>{status.replace('Error: ', '')}</p>
+            {!localApiKey && (
+              <button className="primary-btn" style={{marginTop: '10px'}} onClick={() => setIsSettingsOpen(true)}>Configure API Key</button>
+            )}
+          </div>
+        )}
+        
         {messages.length === 0 ? (
           <div className="empty-state">
             <p>How can I help you code today?</p>

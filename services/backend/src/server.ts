@@ -7,18 +7,45 @@ import { MissionPlanner } from './Planner';
 import { logger } from './logger';
 import { db } from '@vedix/database';
 
+import authRoutes from './routes/auth';
+import apiKeyRoutes from './routes/apiKeys';
+import adminRoutes from './routes/admin';
+
 const server = fastify({ logger: true });
 
 server.register(cors, { origin: '*' });
 server.register(websocket);
+
+// Register API Routes
+server.register(authRoutes, { prefix: '/api/auth' });
+server.register(apiKeyRoutes, { prefix: '/api/keys' });
+server.register(adminRoutes, { prefix: '/api/admin' });
 
 // Initialize our mock event bus and planner
 const eventBus = new EventBus();
 const planner = new MissionPlanner(eventBus);
 
 server.register(async function (fastify) {
-  fastify.get('/ws', { websocket: true }, (connection, req) => {
+  fastify.get('/ws', { websocket: true }, async (connection, req) => {
     server.log.info('Client connected to WebSockets');
+    
+    // Validate API Key
+    const apiKeyStr = (req.query as any).apiKey;
+    if (!apiKeyStr) {
+      connection.socket.send(JSON.stringify({ type: 'error', payload: 'Missing API Key. Please configure your API key in VSCode settings.' }));
+      connection.socket.close(1008, 'Missing API Key');
+      return;
+    }
+    
+    const apiKey = await db.apiKey.findUnique({ where: { key: apiKeyStr }, include: { user: true } });
+    if (!apiKey || (apiKey.expiresAt && apiKey.expiresAt < new Date())) {
+      connection.socket.send(JSON.stringify({ type: 'error', payload: 'Invalid or expired API Key. Please authenticate with a valid key.' }));
+      connection.socket.close(1008, 'Invalid API Key');
+      return;
+    }
+
+    // Attach user to connection or req for further use if needed
+    (connection as any).user = apiKey.user;
 
     // Forward events from the EventBus to the WebSocket client
     const onAgentStatus = (status: string) => {

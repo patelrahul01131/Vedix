@@ -17,6 +17,15 @@
       {
         "command": "vedix.start",
         "title": "Vedix: Start Chat"
+      },
+      {
+        "command": "vedix.logout",
+        "title": "Vedix: Logout (Clear API Key)"
+      },
+      {
+        "command": "vedix.settings",
+        "title": "Vedix: Settings",
+        "icon": "$(settings-gear)"
       }
     ],
     "viewsContainers": {
@@ -36,6 +45,26 @@
           "name": "Vedix Chat"
         }
       ]
+    },
+    "menus": {
+      "view/title": [
+        {
+          "command": "vedix.settings",
+          "when": "view == vedix.chatView",
+          "group": "navigation"
+        }
+      ]
+    },
+    "configuration": {
+      "type": "object",
+      "title": "Vedix Agent",
+      "properties": {
+        "vedix.apiKey": {
+          "type": "string",
+          "default": "",
+          "description": "Your API Key for the Vedix Agent."
+        }
+      }
     }
   },
   "scripts": {

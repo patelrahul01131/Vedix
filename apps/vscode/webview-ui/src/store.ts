@@ -38,6 +38,7 @@ export interface AgentState {
   setActiveSessionId: (id: string | null) => void;
   updateSessionTitle: (id: string, title: string) => void;
   deleteSession: (id: string) => void;
+  clearData: () => void;
 }
 
 export const useAgentStore = create<AgentState>((set, get) => ({
@@ -52,9 +53,29 @@ export const useAgentStore = create<AgentState>((set, get) => ({
   
   setModel: (model) => set({ currentModel: model }),
   
+  clearData: () => {
+    const existingWs = get().ws;
+    if (existingWs) {
+      existingWs.close();
+    }
+    set({
+      messages: [],
+      sessions: [],
+      activeSessionId: null,
+      streamingText: '',
+      status: 'Idle',
+      ws: null
+    });
+  },
+
   connect: () => {
+    const existingWs = get().ws;
+    if (existingWs) {
+      existingWs.close();
+    }
     // In production this might come from extension config, but for dev we use localhost:3001
-    const ws = new WebSocket('ws://localhost:3001/ws');
+    const apiKey = (window as any).API_KEY || '';
+    const ws = new WebSocket(`ws://localhost:3001/ws?apiKey=${apiKey}`);
     
     ws.onopen = () => {
       set({ status: 'Idle', ws });
@@ -71,6 +92,8 @@ export const useAgentStore = create<AgentState>((set, get) => ({
           set({ availableModels: data.payload });
         } else if (data.type === 'status') {
           set({ status: data.payload });
+        } else if (data.type === 'error') {
+          set({ status: `Error: ${data.payload}` });
         } else if (data.type === 'message') {
           set({ streamingText: '' }); // Clear streaming text when final message arrives
           get().addMessage(data.payload);
@@ -100,7 +123,11 @@ export const useAgentStore = create<AgentState>((set, get) => ({
       }
     };
 
-    ws.onclose = () => {
+    ws.onclose = (event) => {
+      if (event.code === 1008) {
+        set({ ws: null });
+        return; // Don't auto-reconnect if it's an auth error
+      }
       set({ status: 'Offline', ws: null });
       // Reconnect after 3 seconds
       setTimeout(() => get().connect(), 3000);

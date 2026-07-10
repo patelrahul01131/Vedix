@@ -7,8 +7,32 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+model User {
+  id           String    @id @default(uuid())
+  email        String    @unique
+  passwordHash String
+  role         String    @default("USER") // 'USER', 'ADMIN'
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  apiKeys      ApiKey[]
+  missions     Mission[]
+  memories     Memory[]
+}
+
+model ApiKey {
+  id        String    @id @default(uuid())
+  key       String    @unique
+  name      String    @default("Default Key")
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime  @default(now())
+  expiresAt DateTime? // Null means never expires
+}
+
 model Mission {
   id            String    @id @default(uuid())
+  userId        String?   // Optional temporarily for backward compatibility
+  user          User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
   title         String
   status        String    @default("Idle")
   workingMemory String    @default("")
@@ -32,6 +56,8 @@ model Message {
 
 model Memory {
   id        String   @id @default(uuid())
+  userId    String?  
+  user      User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
   key       String
   value     String
   createdAt DateTime @default(now())

@@ -952,3 +952,98 @@ body {
   text-overflow: ellipsis;
   line-height: 1.5;
 }
+
+/* Settings Overlay */
+.settings-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: var(--vscode-editor-background);
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+}
+
+.settings-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--vscode-panel-border);
+}
+
+.settings-header h3 {
+  margin: 0;
+  font-size: 14px;
+}
+
+.settings-content {
+  padding: 16px;
+  flex: 1;
+  overflow-y: auto;
+}
+
+.settings-section {
+  margin-bottom: 24px;
+}
+
+.settings-section h4 {
+  margin: 0 0 12px 0;
+  font-size: 12px;
+  text-transform: uppercase;
+  color: var(--vscode-editor-foreground);
+  opacity: 0.7;
+}
+
+.api-key-display {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background-color: var(--vscode-editor-inactiveSelectionBackground);
+  border-radius: 4px;
+  margin-bottom: 12px;
+}
+
+.api-key-display span {
+  font-family: monospace;
+}
+
+.danger-btn {
+  background-color: var(--vscode-errorForeground);
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: opacity 0.2s;
+}
+
+.danger-btn:hover {
+  opacity: 0.8;
+}
+
+.error-banner {
+  margin: 16px;
+  padding: 16px;
+  background-color: var(--vscode-inputValidation-errorBackground, rgba(229, 20, 0, 0.1));
+  border: 1px solid var(--vscode-inputValidation-errorBorder, #e51400);
+  border-radius: 6px;
+  color: var(--vscode-errorForeground, #f48771);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+
+.error-icon {
+  font-size: 24px;
+  margin-bottom: 8px;
+}
+
+.error-banner p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.4;
+}

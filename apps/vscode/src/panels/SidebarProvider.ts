@@ -53,6 +53,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
       </head>
       <script>
         window.WORKSPACE_ROOT = ${JSON.stringify(vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || '')};
+        window.API_KEY = ${JSON.stringify(vscode.workspace.getConfiguration('vedix').get('apiKey') || '')};
       </script>
       <body>
         <div id="root"></div>
@@ -71,6 +72,31 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
         switch (command) {
           case 'hello':
             vscode.window.showInformationMessage(text);
+            return;
+          case 'logout':
+            (async () => {
+              await vscode.workspace.getConfiguration('vedix').update('apiKey', undefined, vscode.ConfigurationTarget.Global);
+              webview.postMessage({ command: 'apiKeyUpdated', payload: '' });
+              vscode.window.showInformationMessage('Vedix API Key has been removed.');
+            })();
+            return;
+          case 'saveApiKey':
+            (async () => {
+              try {
+                const res = await fetch('http://localhost:3001/api/keys/verify', {
+                  headers: { Authorization: `Bearer ${text}` }
+                });
+                if (res.ok) {
+                  await vscode.workspace.getConfiguration('vedix').update('apiKey', text, vscode.ConfigurationTarget.Global);
+                  webview.postMessage({ command: 'apiKeyUpdated', payload: text });
+                  vscode.window.showInformationMessage('API Key validated and saved successfully.');
+                } else {
+                  vscode.window.showErrorMessage('Invalid API Key. The key was not saved.');
+                }
+              } catch (e: any) {
+                vscode.window.showErrorMessage(`Could not connect to backend to verify API key: ${e.message}`);
+              }
+            })();
             return;
           case 'getWorkspaceFiles':
             vscode.workspace.findFiles('**/*.*', '**/node_modules/**').then(files => {
