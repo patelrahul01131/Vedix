@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
-import { ShieldAlert } from 'lucide-react';
+import { ShieldAlert, Mail, Lock } from 'lucide-react';
 
 const API_URL = 'http://localhost:3001/api/auth';
 
@@ -39,56 +39,140 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen bg-background flex items-center justify-center p-4">
-      <div className="max-w-md w-full bg-surface border border-gray-800 rounded-2xl p-8 shadow-2xl backdrop-blur-xl">
-        <div className="flex justify-center mb-8">
-          <div className="h-16 w-16 bg-primary/20 text-primary rounded-2xl flex items-center justify-center">
+    <div style={{
+      minHeight: '100vh',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      background: 'var(--bg-dark)',
+      padding: '24px'
+    }}>
+      <div style={{
+        maxWidth: '400px',
+        width: '100%',
+        background: 'rgba(30, 41, 59, 0.7)',
+        backdropFilter: 'blur(16px)',
+        border: '1px solid var(--border-color)',
+        borderRadius: '16px',
+        padding: '40px',
+        boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)'
+      }}>
+        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '32px' }}>
+          <div style={{
+            height: '64px',
+            width: '64px',
+            background: 'rgba(139, 92, 246, 0.2)',
+            color: 'var(--accent-color)',
+            borderRadius: '16px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center'
+          }}>
             <ShieldAlert size={32} />
           </div>
         </div>
         
-        <h2 className="text-3xl font-bold text-center text-textPrimary mb-2">
+        <h2 style={{ textAlign: 'center', fontSize: '1.875rem', fontWeight: 'bold', marginBottom: '8px' }}>
           Admin Portal
         </h2>
-        <p className="text-center text-textSecondary mb-8">
+        <p style={{ textAlign: 'center', color: 'var(--text-secondary)', marginBottom: '32px' }}>
           Restricted access. Login to manage the system.
         </p>
 
         {error && (
-          <div className="bg-red-500/10 border border-red-500/50 text-red-400 p-3 rounded-lg mb-6 text-sm">
+          <div style={{
+            background: 'rgba(239, 68, 68, 0.1)',
+            border: '1px solid rgba(239, 68, 68, 0.5)',
+            color: 'var(--danger-color)',
+            padding: '12px',
+            borderRadius: '8px',
+            marginBottom: '24px',
+            fontSize: '0.875rem',
+            textAlign: 'center'
+          }}>
             {error}
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="space-y-6">
+        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
           <div>
-            <label className="block text-sm font-medium text-textSecondary mb-2">Admin Email</label>
-            <input
-              type="email"
-              required
-              className="w-full bg-gray-900/50 border border-gray-700 text-textPrimary rounded-lg px-4 py-3 focus:outline-none focus:border-primary transition-colors"
-              placeholder="admin@example.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-            />
+            <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: 500, color: 'var(--text-secondary)', marginBottom: '8px' }}>
+              Admin Email
+            </label>
+            <div style={{ position: 'relative' }}>
+              <div style={{ position: 'absolute', top: '14px', left: '14px', color: 'var(--text-secondary)' }}>
+                <Mail size={18} />
+              </div>
+              <input
+                type="email"
+                required
+                style={{
+                  width: '100%',
+                  background: 'rgba(15, 23, 42, 0.5)',
+                  border: '1px solid var(--border-color)',
+                  color: 'var(--text-primary)',
+                  borderRadius: '8px',
+                  padding: '12px 12px 12px 42px',
+                  fontSize: '1rem',
+                  outline: 'none',
+                  transition: 'border-color 0.2s'
+                }}
+                placeholder="admin@example.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+              />
+            </div>
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-textSecondary mb-2">Password</label>
-            <input
-              type="password"
-              required
-              className="w-full bg-gray-900/50 border border-gray-700 text-textPrimary rounded-lg px-4 py-3 focus:outline-none focus:border-primary transition-colors"
-              placeholder="••••••••"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-            />
+            <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: 500, color: 'var(--text-secondary)', marginBottom: '8px' }}>
+              Password
+            </label>
+            <div style={{ position: 'relative' }}>
+              <div style={{ position: 'absolute', top: '14px', left: '14px', color: 'var(--text-secondary)' }}>
+                <Lock size={18} />
+              </div>
+              <input
+                type="password"
+                required
+                style={{
+                  width: '100%',
+                  background: 'rgba(15, 23, 42, 0.5)',
+                  border: '1px solid var(--border-color)',
+                  color: 'var(--text-primary)',
+                  borderRadius: '8px',
+                  padding: '12px 12px 12px 42px',
+                  fontSize: '1rem',
+                  outline: 'none',
+                  transition: 'border-color 0.2s'
+                }}
+                placeholder="••••••••"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+              />
+            </div>
           </div>
 
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-primary hover:bg-primaryHover text-white font-medium py-3 px-4 rounded-lg flex items-center justify-center gap-2 transition-colors disabled:opacity-50"
+            style={{
+              width: '100%',
+              background: 'var(--accent-color)',
+              color: 'white',
+              fontWeight: 500,
+              padding: '14px',
+              borderRadius: '8px',
+              border: 'none',
+              cursor: loading ? 'not-allowed' : 'pointer',
+              opacity: loading ? 0.7 : 1,
+              transition: 'background 0.2s',
+              fontSize: '1rem',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '8px'
+            }}
           >
             {loading ? 'Authenticating...' : 'Secure Login'}
           </button>

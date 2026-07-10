@@ -21,9 +21,7 @@ export default async function authRoutes(fastify: FastifyInstance) {
 
       const passwordHash = await bcrypt.hash(password, 10);
       
-      // First user is admin for convenience
-      const userCount = await db.user.count();
-      const role = userCount === 0 ? 'ADMIN' : 'USER';
+      const role = 'USER';
 
       const user = await db.user.create({
         data: {

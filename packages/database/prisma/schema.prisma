@@ -17,6 +17,7 @@ model User {
   apiKeys      ApiKey[]
   missions     Mission[]
   memories     Memory[]
+  agentMemories AgentMemory[]
 }
 
 model ApiKey {
@@ -36,6 +37,7 @@ model Mission {
   title         String
   status        String    @default("Idle")
   workingMemory String    @default("")
+  summary       String?   // Rolling summary of older messages
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
   messages      Message[]
@@ -62,6 +64,18 @@ model Memory {
   value     String
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+model AgentMemory {
+  id          String   @id @default(uuid())
+  userId      String   
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type        String   // 'EXPERIENCE', 'ERROR', 'SUCCESS', 'SKILL', 'PATTERN'
+  content     String   // The extracted memory text
+  confidence  Int      @default(50) // Score from 0 to 100 for memory decay
+  status      String   @default("PENDING") // 'PENDING', 'APPROVED', 'REJECTED'
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 }
 
 model AgentState {

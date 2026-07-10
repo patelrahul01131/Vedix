@@ -10,6 +10,7 @@ import { db } from '@vedix/database';
 import authRoutes from './routes/auth';
 import apiKeyRoutes from './routes/apiKeys';
 import adminRoutes from './routes/admin';
+import userRoutes from './routes/user';
 
 const server = fastify({ logger: true });
 
@@ -20,6 +21,7 @@ server.register(websocket);
 server.register(authRoutes, { prefix: '/api/auth' });
 server.register(apiKeyRoutes, { prefix: '/api/keys' });
 server.register(adminRoutes, { prefix: '/api/admin' });
+server.register(userRoutes, { prefix: '/api/user' });
 
 // Initialize our mock event bus and planner
 const eventBus = new EventBus();
@@ -62,8 +64,9 @@ server.register(async function (fastify) {
 
     const onSessionSwitched = async (id: string) => {
       connection.socket.send(JSON.stringify({ type: 'sessionSwitched', payload: id }));
+      const userId = (connection as any).user.id;
       // Also update the list of sessions
-      const sessions = await db.mission.findMany({ orderBy: { updatedAt: 'desc' } });
+      const sessions = await db.mission.findMany({ where: { userId }, orderBy: { updatedAt: 'desc' } });
       connection.socket.send(JSON.stringify({ type: 'sessionsList', payload: sessions }));
     };
 
@@ -88,14 +91,16 @@ server.register(async function (fastify) {
         const data = JSON.parse(message.toString());
         server.log.info(`Received from client: ${JSON.stringify(data)}`);
         
+        const userId = (connection as any).user.id;
+        
         if (data.command === 'getSessions') {
-          const sessions = await db.mission.findMany({ orderBy: { updatedAt: 'desc' } });
+          const sessions = await db.mission.findMany({ where: { userId }, orderBy: { updatedAt: 'desc' } });
           connection.socket.send(JSON.stringify({ type: 'sessionsList', payload: sessions }));
         }
 
         if (data.command === 'createSession') {
-          const newSession = await db.mission.create({ data: { title: 'New Conversation' } });
-          const sessions = await db.mission.findMany({ orderBy: { updatedAt: 'desc' } });
+          const newSession = await db.mission.create({ data: { title: 'New Conversation', userId } });
+          const sessions = await db.mission.findMany({ where: { userId }, orderBy: { updatedAt: 'desc' } });
           connection.socket.send(JSON.stringify({ type: 'sessionsList', payload: sessions }));
           // Auto-select the newly created session
           connection.socket.send(JSON.stringify({ type: 'sessionSwitched', payload: newSession.id }));
@@ -131,7 +136,7 @@ server.register(async function (fastify) {
         if (data.command === 'updateSessionTitle') {
           if (data.sessionId && data.title) {
             await db.mission.update({ where: { id: data.sessionId }, data: { title: data.title } });
-            const sessions = await db.mission.findMany({ orderBy: { updatedAt: 'desc' } });
+            const sessions = await db.mission.findMany({ where: { userId }, orderBy: { updatedAt: 'desc' } });
             connection.socket.send(JSON.stringify({ type: 'sessionsList', payload: sessions }));
           }
         }
@@ -139,7 +144,7 @@ server.register(async function (fastify) {
         if (data.command === 'deleteSession') {
           if (data.sessionId) {
             await db.mission.delete({ where: { id: data.sessionId } });
-            const sessions = await db.mission.findMany({ orderBy: { updatedAt: 'desc' } });
+            const sessions = await db.mission.findMany({ where: { userId }, orderBy: { updatedAt: 'desc' } });
             connection.socket.send(JSON.stringify({ type: 'sessionsList', payload: sessions }));
           }
         }
@@ -223,7 +228,7 @@ server.register(async function (fastify) {
           } else if (data.text.toLowerCase() === 'decline') {
             planner.resolveApproval(false);
           } else {
-            planner.planMission(data.text, data.sessionId).catch(err => server.log.error(err));
+            planner.planMission(data.text, data.sessionId, userId).catch(err => server.log.error(err));
           }
         }
       } catch (err) {
