@@ -5,6 +5,7 @@ import rehypeHighlight from 'rehype-highlight';
 import 'highlight.js/styles/vs2015.css';
 import { useAgentStore } from './store';
 import { vscode } from './utilities/vscode';
+import { SkillLibrary } from './SkillLibrary';
 import './App.css';
 
 const markdownRemarkPlugins = [remarkGfm];
@@ -178,6 +179,31 @@ const MessageItem = memo(({ msg, isLast, nextMsg, openActivityId, setOpenActivit
     );
   }
 
+  if (msg.isSummary) {
+    return (
+      <div className="message system status-card">
+        <div className="activities-container">
+          <div className="activity-item">
+            <div 
+              className="activity-header" 
+              onClick={() => setOpenActivityId(openActivityId === msg.text ? null : msg.text)}
+              style={{ cursor: 'pointer' }}
+            >
+              <span className="activity-icon">🗜️</span>
+              <span className="activity-title">Summarized Context</span>
+              <span className={`chevron ${openActivityId === msg.text ? 'open' : ''}`}>›</span>
+            </div>
+            {openActivityId === msg.text && (
+              <div className="activity-details" style={{ whiteSpace: 'pre-wrap', color: 'var(--vscode-descriptionForeground)' }}>
+                {msg.text.replace('**Summarized Context**\n\n', '')}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   const isPermission = msg.role === 'agent' && msg.text.startsWith('PERMISSION_REQUIRED:');
   let toolName = '';
   let toolArgs: any = {};
@@ -242,6 +268,7 @@ function App() {
   const [openActivityId, setOpenActivityId] = useState<string | null>(null)
   const [workspaceFiles, setWorkspaceFiles] = useState<string[]>([])
   const [openSourcesModal, setOpenSourcesModal] = useState<any[] | null>(null)
+  const [showSkillLibrary, setShowSkillLibrary] = useState(false)
   
   const [isModelDropdownOpen, setModelDropdownOpen] = useState(false);
   const modelRef = useRef<HTMLDivElement>(null);
@@ -356,9 +383,16 @@ function App() {
           </span>
         </div>
         <div className="header-right">
+          <button 
+            title="Skill Library" 
+            className={`icon-button ${showSkillLibrary ? 'active' : ''}`} 
+            onClick={() => { setShowSkillLibrary(!showSkillLibrary); setShowHistory(false); setIsSettingsOpen(false); }}
+          >
+            🧠
+          </button>
           <button title="New Session" className="icon-button" onClick={() => createSession()}>➕</button>
-          <button title="History" className="icon-button" onClick={() => setShowHistory(!showHistory)}>🕒</button>
-          <button title="Settings" className="icon-button" onClick={() => setIsSettingsOpen(!isSettingsOpen)}>⚙️</button>
+          <button title="History" className={`icon-button ${showHistory ? 'active' : ''}`} onClick={() => { setShowHistory(!showHistory); setShowSkillLibrary(false); setIsSettingsOpen(false); }}>🕒</button>
+          <button title="Settings" className="icon-button" onClick={() => { setIsSettingsOpen(!isSettingsOpen); setShowHistory(false); setShowSkillLibrary(false); }}>⚙️</button>
         </div>
       </header>
 
@@ -403,6 +437,12 @@ function App() {
               </div>
             )}
           </div>
+        </div>
+      )}
+
+      {showSkillLibrary && (
+        <div className="history-drawer">
+          <SkillLibrary />
         </div>
       )}
 

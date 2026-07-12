@@ -44,6 +44,17 @@ export default function AgentKnowledge() {
     }
   };
 
+  const updateStatus = async (id: string, status: string) => {
+    try {
+      await axios.patch(`${API_URL}/${id}/status`, { status }, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      fetchMemories(); // Refresh list after update
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
   const filteredMemories = memories.filter(m => filterType === 'ALL' || m.type === filterType);
 
   if (loading && memories.length === 0) return <div>Loading...</div>;
@@ -101,6 +112,7 @@ export default function AgentKnowledge() {
               <th>Confidence</th>
               <th>Status</th>
               <th>Date</th>
+              <th>Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -136,6 +148,35 @@ export default function AgentKnowledge() {
                 </td>
                 <td style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>
                   {new Date(m.createdAt).toLocaleDateString()}
+                </td>
+                <td>
+                  {m.status === 'PENDING' && (
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                      <button 
+                        onClick={() => updateStatus(m.id, 'APPROVED')}
+                        style={{ padding: '4px 8px', background: 'var(--success-color)', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '0.8rem' }}
+                      >
+                        Approve
+                      </button>
+                      <button 
+                        onClick={() => updateStatus(m.id, 'REJECTED')}
+                        style={{ padding: '4px 8px', background: 'var(--danger-color)', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '0.8rem' }}
+                      >
+                        Decline
+                      </button>
+                    </div>
+                  )}
+                  {m.status === 'APPROVED' && m.confidence < 100 && (
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                      <button 
+                        onClick={() => updateStatus(m.id, 'APPROVED')}
+                        style={{ padding: '4px 8px', background: 'var(--accent-color)', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '0.8rem' }}
+                        title="Manually verify to increase confidence to 100%"
+                      >
+                        Trust Fully
+                      </button>
+                    </div>
+                  )}
                 </td>
               </tr>
             ))}

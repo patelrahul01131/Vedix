@@ -54,6 +54,12 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ title = 'Vedix Admin 
           <NavLink to="/tools" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
             Available Tools
           </NavLink>
+          <NavLink to="/queue" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
+            Queue
+          </NavLink>
+          <NavLink to="/tokens" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
+            Tokens
+          </NavLink>
         </nav>
       </aside>
 

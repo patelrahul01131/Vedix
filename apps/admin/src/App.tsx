@@ -7,6 +7,8 @@ import UserDetails from './pages/UserDetails';
 import Agents from './pages/Agents';
 import AgentKnowledge from './pages/AgentKnowledge';
 import Tools from './pages/Tools';
+import { QueueDashboard } from './pages/QueueDashboard';
+import { TokenEconomics } from './pages/TokenEconomics';
 
 function App() {
   return (
@@ -21,6 +23,8 @@ function App() {
           <Route path="/agents" element={<Agents />} />
           <Route path="/agent-knowledge" element={<AgentKnowledge />} />
           <Route path="/tools" element={<Tools />} />
+          <Route path="/queue" element={<QueueDashboard />} />
+          <Route path="/tokens" element={<TokenEconomics />} />
         </Route>
         
         <Route path="*" element={<Navigate to="/login" replace />} />

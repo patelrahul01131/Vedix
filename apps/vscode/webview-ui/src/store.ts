@@ -22,6 +22,7 @@ export interface AgentState {
   streamingText: string;
   ws: WebSocket | null;
   sessions: any[];
+  skills: any[];
   availableModels: string[];
   currentModel: string;
   activeSessionId: string | null;
@@ -38,6 +39,9 @@ export interface AgentState {
   setActiveSessionId: (id: string | null) => void;
   updateSessionTitle: (id: string, title: string) => void;
   deleteSession: (id: string) => void;
+  getSkills: () => void;
+  addSkill: (content: string) => void;
+  deleteSkill: (id: string) => void;
   clearData: () => void;
 }
 
@@ -47,6 +51,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
   streamingText: '',
   ws: null,
   sessions: [],
+  skills: [],
   availableModels: [],
   currentModel: 'mistral:devstral-2512',
   activeSessionId: null,
@@ -78,16 +83,23 @@ export const useAgentStore = create<AgentState>((set, get) => ({
     const ws = new WebSocket(`ws://localhost:3001/ws?apiKey=${apiKey}`);
     
     ws.onopen = () => {
-      set({ status: 'Idle', ws });
-      get().fetchSessions();
-      get().fetchModels();
+      // Just connect, wait for authenticated message to fetch data
+      set({ ws });
     };
 
     ws.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
-        if (data.type === 'sessionsList') {
+        if (data.type === 'authenticated') {
+          set({ status: 'Idle' });
+          get().fetchSessions();
+          get().fetchModels();
+        } else if (data.type === 'sessionsList') {
           set({ sessions: data.payload });
+          const { activeSessionId, setActiveSessionId } = get();
+          if (!activeSessionId && data.payload && data.payload.length > 0) {
+            setActiveSessionId(data.payload[0].id);
+          }
         } else if (data.type === 'modelsList') {
           set({ availableModels: data.payload });
         } else if (data.type === 'status') {
@@ -105,6 +117,8 @@ export const useAgentStore = create<AgentState>((set, get) => ({
           get().setActiveSessionId(data.payload);
         } else if (data.type === 'sessionMessages') {
           set({ messages: data.payload });
+        } else if (data.type === 'skillsList') {
+          set({ skills: data.payload });
         } else if (data.type === 'debugData') {
           console.groupCollapsed(`🤖 [Agent Debug] ${data.payload.phase} (Loop ${data.payload.loopCount})`);
           if (data.payload.payload) {
@@ -230,6 +244,27 @@ export const useAgentStore = create<AgentState>((set, get) => ({
       if (activeSessionId === id) {
         set({ activeSessionId: null, messages: [] });
       }
+    }
+  },
+
+  getSkills: () => {
+    const { ws } = get();
+    if (ws?.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({ command: 'getSkills' }));
+    }
+  },
+
+  addSkill: (content: string) => {
+    const { ws } = get();
+    if (ws?.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({ command: 'addSkill', content }));
+    }
+  },
+
+  deleteSkill: (id: string) => {
+    const { ws } = get();
+    if (ws?.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({ command: 'deleteSkill', skillId: id }));
     }
   }
 }));

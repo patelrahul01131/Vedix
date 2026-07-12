@@ -74,8 +74,20 @@ model AgentMemory {
   content     String   // The extracted memory text
   confidence  Int      @default(50) // Score from 0 to 100 for memory decay
   status      String   @default("PENDING") // 'PENDING', 'APPROVED', 'REJECTED'
+  embedding   Json?    // Stores embedding as float array for local Node.js RAG
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+}
+
+model TokenLog {
+  id          String   @id @default(uuid())
+  modelName   String
+  service     String   // e.g. "Planner", "MemoryExtractor", "MemoryCritic"
+  promptTokens Int     @default(0)
+  completionTokens Int @default(0)
+  totalTokens Int      @default(0)
+  
+  createdAt   DateTime @default(now())
 }
 
 model AgentState {

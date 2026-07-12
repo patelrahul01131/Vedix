@@ -1,6 +1,7 @@
 import { FastifyInstance } from 'fastify';
 import { db } from '@vedix/database';
 import { verifyJWT, verifyAdmin } from '../middleware/auth';
+import { memoryQueue } from '../queue/memoryQueue';
 
 export default async function adminRoutes(fastify: FastifyInstance) {
   // Protect all routes with JWT and Admin checks
@@ -124,6 +125,31 @@ export default async function adminRoutes(fastify: FastifyInstance) {
     }
   });
 
+  fastify.patch('/memories/:id/status', async (request, reply) => {
+    try {
+      const { id } = request.params as { id: string };
+      const { status } = request.body as { status: 'APPROVED' | 'REJECTED' };
+      
+      if (!['APPROVED', 'REJECTED'].includes(status)) {
+        return reply.code(400).send({ error: 'Invalid status. Must be APPROVED or REJECTED.' });
+      }
+
+      const updateData: any = { status };
+      if (status === 'APPROVED') {
+        updateData.confidence = 100; // Human explicit approval means 100% confidence
+      }
+
+      const memory = await db.agentMemory.update({
+        where: { id },
+        data: updateData
+      });
+
+      return reply.send({ success: true, memory });
+    } catch (error) {
+      return reply.code(500).send({ error: 'Failed to update memory status' });
+    }
+  });
+
   fastify.get('/tools', async (request, reply) => {
     try {
       // Hardcoded list for now, ideally retrieved from Planner instance or registry
@@ -140,6 +166,71 @@ export default async function adminRoutes(fastify: FastifyInstance) {
       return reply.send({ tools });
     } catch (error) {
       return reply.code(500).send({ error: 'Failed to fetch tools' });
+    }
+  });
+
+  fastify.get('/queue-stats', async (request, reply) => {
+    try {
+      const waiting = await memoryQueue.getWaitingCount();
+      const active = await memoryQueue.getActiveCount();
+      const completed = await memoryQueue.getCompletedCount();
+      const failed = await memoryQueue.getFailedCount();
+      
+      const jobs = await memoryQueue.getJobs(['waiting', 'active', 'failed', 'delayed'], 0, 20);
+
+      return reply.send({
+        stats: { waiting, active, completed, failed },
+        jobs: jobs.map(j => ({ id: j.id, name: j.name, status: j.id, data: j.data }))
+      });
+    } catch (error) {
+      return reply.code(500).send({ error: 'Failed to fetch queue stats' });
+    }
+  });
+
+  fastify.get('/token-stats', async (request, reply) => {
+    try {
+      // Group by modelName
+      const modelStats = await db.tokenLog.groupBy({
+        by: ['modelName'],
+        _sum: {
+          promptTokens: true,
+          completionTokens: true,
+          totalTokens: true
+        }
+      });
+      
+      // Group by service
+      const serviceStats = await db.tokenLog.groupBy({
+        by: ['service'],
+        _sum: {
+          totalTokens: true
+        }
+      });
+
+      // Get last 7 days chart data
+      const chartData = [];
+      const now = new Date();
+      for (let i = 6; i >= 0; i--) {
+        const startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i);
+        const endDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i + 1);
+        
+        const dayTokens = await db.tokenLog.aggregate({
+          where: { createdAt: { gte: startDate, lt: endDate } },
+          _sum: { totalTokens: true }
+        });
+        chartData.push({
+          date: startDate.toISOString().split('T')[0],
+          tokens: dayTokens._sum.totalTokens || 0
+        });
+      }
+
+      return reply.send({
+        modelStats: modelStats.map(m => ({ model: m.modelName, total: m._sum.totalTokens })),
+        serviceStats: serviceStats.map(s => ({ service: s.service, total: s._sum.totalTokens })),
+        chartData
+      });
+    } catch (error) {
+      return reply.code(500).send({ error: 'Failed to fetch token stats' });
     }
   });
 }

@@ -163,7 +163,8 @@ export class ModelGateway {
 
       return {
         text: fullText,
-        messages: finalResponse.messages
+        messages: finalResponse.messages,
+        usage: await result.usage
       };
     } catch (err: any) {
       console.error('generateText Error:', err);
@@ -194,5 +195,14 @@ export class ModelGateway {
 
       throw new Error(`LLM Generation Failed: ${errorMessage}`);
     }
+  }
+
+  async embed(text: string) {
+    const { embed } = await import('ai');
+    const { mistral } = await import('@ai-sdk/mistral');
+    return embed({
+      model: mistral.embedding('mistral-embed'),
+      value: text
+    });
   }
 }

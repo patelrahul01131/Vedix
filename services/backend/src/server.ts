@@ -6,6 +6,8 @@ import { EventBus } from './EventBus';
 import { MissionPlanner } from './Planner';
 import { logger } from './logger';
 import { db } from '@vedix/database';
+import { MemoryCritic } from './MemoryCritic';
+import './queue/memoryQueue'; // Start the queue worker
 
 import authRoutes from './routes/auth';
 import apiKeyRoutes from './routes/apiKeys';
@@ -128,7 +130,17 @@ server.register(async function (fastify) {
               }
               return { role: m.role, text: text, sources: sources };
             });
+            const mission = await db.mission.findUnique({ where: { id: data.sessionId } });
             const cleaned = formatted.filter((m: any) => !(m.role === 'agent' && (!m.text || typeof m.text !== 'string' || m.text.trim() === '')));
+            
+            if (mission?.summary) {
+              cleaned.unshift({
+                role: 'system',
+                text: `**Summarized Context**\n\n${mission.summary}`,
+                isSummary: true
+              } as any);
+            }
+
             connection.socket.send(JSON.stringify({ type: 'sessionMessages', payload: cleaned }));
           }
         }
@@ -146,6 +158,48 @@ server.register(async function (fastify) {
             await db.mission.delete({ where: { id: data.sessionId } });
             const sessions = await db.mission.findMany({ where: { userId }, orderBy: { updatedAt: 'desc' } });
             connection.socket.send(JSON.stringify({ type: 'sessionsList', payload: sessions }));
+          }
+        }
+
+        if (data.command === 'getSkills') {
+          const skills = await (db as any).agentMemory.findMany({ 
+            where: { userId, status: 'APPROVED' },
+            orderBy: { confidence: 'desc' }
+          });
+          connection.socket.send(JSON.stringify({ type: 'skillsList', payload: skills }));
+        }
+
+        if (data.command === 'addSkill') {
+          if (data.content) {
+            // Need to generate embedding inline since this is manual injection
+            let embedding = null;
+            try {
+               const { ModelGateway } = require('@vedix/model-gateway');
+               const gw = new ModelGateway('mistral-large-latest');
+               const embedRes = await gw.embed(data.content);
+               embedding = embedRes.embedding;
+            } catch(e) {}
+            
+            await (db as any).agentMemory.create({
+              data: {
+                userId,
+                type: 'SKILL',
+                content: data.content,
+                status: 'APPROVED', // Manually added skills skip PENDING
+                confidence: 100, // Max confidence
+                embedding
+              }
+            });
+            const skills = await (db as any).agentMemory.findMany({ where: { userId, status: 'APPROVED' }, orderBy: { confidence: 'desc' } });
+            connection.socket.send(JSON.stringify({ type: 'skillsList', payload: skills }));
+          }
+        }
+
+        if (data.command === 'deleteSkill') {
+          if (data.skillId) {
+            await (db as any).agentMemory.delete({ where: { id: data.skillId } });
+            const skills = await (db as any).agentMemory.findMany({ where: { userId, status: 'APPROVED' }, orderBy: { confidence: 'desc' } });
+            connection.socket.send(JSON.stringify({ type: 'skillsList', payload: skills }));
           }
         }
 
@@ -236,6 +290,9 @@ server.register(async function (fastify) {
       }
     });
 
+    // Notify client that authentication is complete and we are ready to receive messages
+    connection.socket.send(JSON.stringify({ type: 'authenticated' }));
+
     connection.socket.on('close', () => {
       server.log.info('Client disconnected');
       eventBus.off('status', onAgentStatus);
@@ -257,6 +314,20 @@ const start = async () => {
     await server.listen({ port: 3001, host: '0.0.0.0' });
     logger.info('Vedix Backend is running on http://localhost:3001');
     logger.info('WebSocket listening on ws://localhost:3001/ws');
+
+    // Start background MemoryCritic
+    const memoryCritic = new MemoryCritic();
+    setInterval(() => {
+      memoryCritic.processPendingMemories().catch(e => logger.error(`MemoryCritic failed: ${e}`));
+    }, 2 * 60 * 1000);
+
+    // Run Memory Decay once every 24 hours
+    setInterval(() => {
+      memoryCritic.decayMemories().catch(e => logger.error(`Memory Decay failed: ${e}`));
+    }, 24 * 60 * 60 * 1000);
+    
+    // Initial run
+    memoryCritic.processPendingMemories().catch(err => logger.error(`MemoryCritic initial error: ${err}`));
   } catch (err) {
     logger.error(err);
     process.exit(1);
