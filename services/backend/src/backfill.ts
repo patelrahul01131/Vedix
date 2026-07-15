@@ -6,7 +6,7 @@ async function backfillEmbeddings() {
   const gateway = new ModelGateway('mistral-large-latest');
 
   const allMemories = await db.agentMemory.findMany();
-  const memories = allMemories.filter(m => m.embedding === null || m.embedding === undefined || (Array.isArray(m.embedding) && m.embedding.length === 0));
+  const memories = allMemories.filter((m: any) => m.embedding === null || m.embedding === undefined || (Array.isArray(m.embedding) && m.embedding.length === 0));
 
   console.log(`Found ${memories.length} memories without embeddings.`);
 

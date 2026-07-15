@@ -24,7 +24,7 @@ export class SyntaxCheckerTool extends Tool {
     }
 
     try {
-      const workspaceRoot = process.env.WORKSPACE_ROOT || path.resolve(process.cwd(), '../../');
+      const workspaceRoot = (args as any).__workspaceRoot || process.env.WORKSPACE_ROOT || path.resolve(process.cwd(), '../../');
       const resolvedPath = path.resolve(workspaceRoot, args.path);
       const ext = path.extname(resolvedPath).toLowerCase();
 

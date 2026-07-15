@@ -167,16 +167,19 @@ export default async function adminRoutes(fastify: FastifyInstance) {
 
   fastify.get('/tools', async (request, reply) => {
     try {
-      // Hardcoded list for now, ideally retrieved from Planner instance or registry
+      // Tool list mirrors the exact tool names registered in MissionPlanner (Planner.ts)
       const tools = [
-        { name: 'read_file', description: 'Read file contents from workspace' },
-        { name: 'write_file', description: 'Write or overwrite a file' },
-        { name: 'edit_file', description: 'Make specific line edits to a file' },
-        { name: 'delete_file', description: 'Delete a file' },
-        { name: 'file_search', description: 'Search for files or text within files' },
-        { name: 'run_command', description: 'Execute a shell command' },
-        { name: 'update_working_memory', description: 'Update current state and plans' },
-        { name: 'web_search', description: 'Search the internet for real-world knowledge' }
+        { name: 'read_file',               description: 'Read file contents from workspace' },
+        { name: 'write_file',              description: 'Create a new file or completely overwrite an existing file' },
+        { name: 'update_file',             description: 'Make specific line edits to an existing file' },
+        { name: 'delete_file',             description: 'Delete a file permanently' },
+        { name: 'run_command',             description: 'Execute a shell command in the workspace root (requires approval)' },
+        { name: 'git',                     description: 'Run git commands in the workspace root (requires approval)' },
+        { name: 'semantic_search',         description: 'Semantic search over code snippets in the codebase' },
+        { name: 'workspace_tree',          description: 'Get a tree view of the workspace directory structure' },
+        { name: 'update_working_memory',   description: 'Persist the current task state and plan to working memory' },
+        { name: 'syntax_checker',          description: 'Check a file for syntax errors' },
+        { name: 'web_search',              description: 'Search the internet for real-world knowledge' },
       ];
       return reply.send({ tools });
     } catch (error) {
@@ -247,8 +250,8 @@ export default async function adminRoutes(fastify: FastifyInstance) {
       }
 
       return reply.send({
-        modelStats: modelStats.map(m => ({ model: m.modelName, total: m._sum.totalTokens })),
-        serviceStats: serviceStats.map(s => ({ service: s.service, total: s._sum.totalTokens })),
+        modelStats: modelStats.map((m: any) => ({ model: m.modelName, total: m._sum.totalTokens })),
+        serviceStats: serviceStats.map((s: any) => ({ service: s.service, total: s._sum.totalTokens })),
         chartData
       });
     } catch (error) {

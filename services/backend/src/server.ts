@@ -118,7 +118,7 @@ server.register(async function (fastify) {
         if (data.command === 'getSessionMessages') {
           if (data.sessionId) {
             const dbMsgs = await db.message.findMany({ where: { missionId: data.sessionId }, orderBy: { createdAt: 'asc' } });
-            const formatted = dbMsgs.map(m => {
+            const formatted = dbMsgs.map((m: any) => {
               let text = m.content;
               if (m.role === 'agent' && typeof text === 'string' && (text.startsWith('[') || text.startsWith('{'))) {
                 try {
@@ -306,6 +306,9 @@ server.register(async function (fastify) {
 
     connection.socket.on('close', () => {
       server.log.info('Client disconnected');
+      // Auto-decline any pending approval to prevent leaked promises
+      // when a user disconnects while the agent is waiting for permission.
+      planner.resolveApproval(false);
       eventBus.off('status', onAgentStatus);
       eventBus.off('message', onAgentMessage);
       eventBus.off('debugData', onDebugData);

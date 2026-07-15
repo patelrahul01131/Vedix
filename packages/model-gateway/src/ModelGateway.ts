@@ -1,24 +1,45 @@
-// @ts-nocheck
-import { generateText, streamText, tool as aiTool } from 'ai';
+// Minimal Node.js process shim — avoids requiring @types/node as a dependency
+// while still getting type safety for process.env access.
+declare const process: { env: Record<string, string | undefined> };
+
+import { streamText, tool as aiTool } from 'ai';
 import { createOpenAI } from '@ai-sdk/openai';
 import { mistral } from '@ai-sdk/mistral';
 import { google } from '@ai-sdk/google';
 import { ollama } from 'ollama-ai-provider';
 import { Tool } from '@vedix/tool-sdk';
-import { z } from 'zod';
+import { z, ZodTypeAny } from 'zod';
 
-function createZodSchema(schema: any) {
+// ────────────────────────────────────────────────────────────────────────────
+// Internal schema types
+// ────────────────────────────────────────────────────────────────────────────
+
+interface JsonSchemaProperty {
+  type: string;
+  description?: string;
+}
+
+interface JsonSchema {
+  type: string;
+  properties: Record<string, JsonSchemaProperty>;
+  required?: string[];
+}
+
+type ZodShape = Record<string, ZodTypeAny>;
+
+function createZodSchema(schema: JsonSchema): ZodTypeAny {
   if (schema.type === 'object') {
-    const shape: any = {};
+    const shape: ZodShape = {};
     for (const [key, value] of Object.entries(schema.properties)) {
       try {
-        let zType;
-        if (value.type === 'string') zType = z.string().describe(value.description || '');
-        else if (value.type === 'number') zType = z.number().describe(value.description || '');
-        else if (value.type === 'boolean') zType = z.boolean().describe(value.description || '');
-        else if (value.type === 'array') zType = z.array(z.any()).describe(value.description || '');
-        else zType = z.any().describe(value.description || '');
-        
+        const desc = value.description || '';
+        let zType: ZodTypeAny;
+        if (value.type === 'string') zType = z.string().describe(desc);
+        else if (value.type === 'number') zType = z.number().describe(desc);
+        else if (value.type === 'boolean') zType = z.boolean().describe(desc);
+        else if (value.type === 'array') zType = z.array(z.any()).describe(desc);
+        else zType = z.any().describe(desc);
+
         if (schema.required && !schema.required.includes(key)) {
           zType = zType.optional();
         }
@@ -33,50 +54,86 @@ function createZodSchema(schema: any) {
   return z.any();
 }
 
+// ────────────────────────────────────────────────────────────────────────────
+// Public interfaces
+// ────────────────────────────────────────────────────────────────────────────
+
 export interface GenerateOptions {
-  messages: any[];
+  messages: Record<string, unknown>[];
   systemPrompt?: string;
   tools?: Tool[];
   onToken?: (token: string) => void;
-  onToolCall?: (toolName: string, args: any) => Promise<any>;
+  onToolCall?: (toolName: string, args: Record<string, unknown>) => Promise<unknown>;
 }
 
+export interface GenerateResult {
+  text: string;
+  messages: unknown[];
+  usage: unknown;
+}
+
+export interface EmbedResult {
+  embedding: number[];
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// ModelGateway
+// ────────────────────────────────────────────────────────────────────────────
+
 export class ModelGateway {
-  private lastToolResult: any = null;
-  
   constructor(public modelName: string = 'gpt-4o') {}
 
   /**
    * Translates our Tool SDK definitions into Vercel AI SDK tool definitions.
+   *
+   * The Vercel AI SDK uses complex generic types for tools that cannot be
+   * satisfied without `as any` casts at the integration boundary — this is
+   * the correct approach when wrapping a third-party SDK with its own generics.
+   * The surrounding Planner code is fully typed; only the SDK boundary is cast.
    */
-  private buildTools(tools: Tool[] | undefined, onToolCall?: (toolName: string, args: any) => Promise<any>) {
-    if (!tools) return undefined;
-    
-    const aiTools: Record<string, any> = {};
+  private buildTools(
+    tools: Tool[] | undefined,
+    onToolCall?: (toolName: string, args: Record<string, unknown>) => Promise<unknown>
+  ): Record<string, unknown> | undefined {
+    if (!tools || tools.length === 0) return undefined;
+
+    const aiTools: Record<string, unknown> = {};
     for (const t of tools) {
-      // Vercel AI SDK tool definition
-      aiTools[t.name] = aiTool({
+      const typedSchema = t.schema as unknown as JsonSchema;
+      // The Vercel AI SDK aiTool() signature uses complex generic overloads
+      // based on the inferred Zod schema type. Since our schema is built
+      // dynamically at runtime from JSON Schema, we must cast at the boundary.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      aiTools[t.name] = (aiTool as any)({
         description: t.description,
-        parameters: createZodSchema(t.schema), // Convert JSON Schema to Zod for AI SDK
-        execute: (async (args: any) => {
-          let res;
+        parameters: createZodSchema(typedSchema),
+        execute: async (args: Record<string, unknown>) => {
           if (onToolCall) {
-            res = await onToolCall(t.name, args);
-          } else {
-            res = await t.execute(args);
+            return await onToolCall(t.name, args);
           }
-          this.lastToolResult = res;
-          return res;
-        }) as any
+          return await t.execute(args);
+        },
       });
     }
     return aiTools;
   }
 
-  async generate(options: GenerateOptions) {
-    const aiTools = this.buildTools(options.tools, options.onToolCall);
-    
-    // Parse prefix (e.g., 'openrouter:openai/gpt-4o')
+  /**
+   * Creates an OpenAI-compatible provider with the given base URL and API key.
+   * The `compatibility: 'compatible'` option is required for non-OpenAI providers
+   * but may not be in all versions of the type definition, hence the cast.
+   */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private makeOpenAICompatProvider(baseURL: string, apiKey: string | undefined): any {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return createOpenAI({ baseURL, apiKey, compatibility: 'compatible' } as any);
+  }
+
+  /**
+   * Resolves the LLM provider model instance based on the modelName prefix.
+   */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private resolveModel(): any {
     let providerName = 'openrouter';
     let rawModelName = this.modelName;
 
@@ -90,67 +147,53 @@ export class ModelGateway {
       else if (this.modelName.startsWith('gpt-')) providerName = 'openrouter';
     }
 
-    let modelInstance;
     if (providerName === 'mistral') {
-      modelInstance = mistral(rawModelName);
+      return mistral(rawModelName);
     } else if (providerName === 'google' || providerName === 'gemini') {
-      modelInstance = google(rawModelName);
+      return google(rawModelName);
     } else if (providerName === 'ollama') {
-      modelInstance = ollama(rawModelName);
+      return ollama(rawModelName);
     } else if (providerName === 'deepseek') {
-      const deepseekProvider = createOpenAI({
-        baseURL: 'https://api.deepseek.com',
-        apiKey: process.env.DEEPSEEK_API_KEY,
-        compatibility: 'compatible'
-      });
-      modelInstance = deepseekProvider(rawModelName);
+      return this.makeOpenAICompatProvider('https://api.deepseek.com', process.env.DEEPSEEK_API_KEY)(rawModelName);
     } else if (providerName === 'groq') {
-      const groqProvider = createOpenAI({
-        baseURL: 'https://api.groq.com/openai/v1',
-        apiKey: process.env.GROK_API_KEY,
-        compatibility: 'compatible'
-      });
-      modelInstance = groqProvider(rawModelName);
+      return this.makeOpenAICompatProvider('https://api.groq.com/openai/v1', process.env.GROK_API_KEY)(rawModelName);
     } else if (providerName === 'github') {
-      const githubProvider = createOpenAI({
-        baseURL: 'https://models.inference.ai.azure.com',
-        apiKey: process.env.GITHUB_API_KEY,
-        compatibility: 'compatible'
-      });
-      modelInstance = githubProvider(rawModelName);
+      return this.makeOpenAICompatProvider('https://models.inference.ai.azure.com', process.env.GITHUB_API_KEY)(rawModelName);
     } else {
       // Default to OpenRouter
-      const openRouterProvider = createOpenAI({
-        baseURL: 'https://openrouter.ai/api/v1',
-        apiKey: process.env.OPEN_ROUTER_API_KEY,
-        compatibility: 'compatible'
-      });
-      modelInstance = openRouterProvider(rawModelName);
+      return this.makeOpenAICompatProvider('https://openrouter.ai/api/v1', process.env.OPEN_ROUTER_API_KEY)(rawModelName);
     }
+  }
+
+  async generate(options: GenerateOptions): Promise<GenerateResult> {
+    const aiTools = this.buildTools(options.tools, options.onToolCall);
+    const modelInstance = this.resolveModel();
 
     try {
-      let sdkError: any = null;
+      let sdkError: Error | null = null;
 
-      const result = await streamText({
-        model: modelInstance as any,
-        messages: options.messages as any,
+      // The Vercel AI SDK streamText has complex generic overloads.
+      // We cast at the SDK boundary; everything the Planner passes in is typed.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const result = await (streamText as any)({
+        model: modelInstance,
+        messages: options.messages,
         system: options.systemPrompt,
-        tools: aiTools as any,
-        onError: ({ error }) => {
-          sdkError = error;
-        }
+        tools: aiTools,
+        onError: ({ error }: { error: unknown }) => {
+          sdkError = error as Error;
+        },
       });
 
       let fullText = '';
       for await (const textPart of result.textStream) {
         fullText += textPart;
         if (options.onToken) {
-          options.onToken(textPart);
+          options.onToken(textPart as string);
         }
       }
 
-      // Explicitly await the final text to catch any API errors that occurred asynchronously
-      // and didn't propagate through the textStream iterator.
+      // Explicitly await the final text to surface async API errors
       try {
         await result.text;
       } catch (e) {
@@ -158,51 +201,56 @@ export class ModelGateway {
         throw e;
       }
 
-      // Get the full messages generated in this step (including tool calls and results)
       const finalResponse = await result.response;
 
       return {
         text: fullText,
         messages: finalResponse.messages,
-        usage: await result.usage
+        usage: await result.usage,
       };
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('generateText Error:', err);
-      let errorMessage = err.message || 'Unknown error';
+      const error = err as Record<string, unknown>;
+      let errorMessage = (error['message'] as string) || 'Unknown error';
 
-      // Attempt to extract deeper error messages from Vercel AI SDK
-      if (err.lastError) {
-        errorMessage = err.lastError.message || errorMessage;
-        if (err.lastError.responseBody) {
+      // Attempt to extract deeper error messages from Vercel AI SDK error shapes
+      if (error['lastError']) {
+        const lastErr = error['lastError'] as Record<string, unknown>;
+        errorMessage = (lastErr['message'] as string) || errorMessage;
+        if (lastErr['responseBody']) {
           try {
-            const body = JSON.parse(err.lastError.responseBody);
-            if (body.error && body.error.message) {
+            const body = JSON.parse(lastErr['responseBody'] as string) as {
+              error?: { message?: string; metadata?: { raw?: string } };
+            };
+            if (body.error?.message) {
               errorMessage = body.error.message;
-              if (body.error.metadata && body.error.metadata.raw) {
-                errorMessage = body.error.metadata.raw;
-              }
+              if (body.error.metadata?.raw) errorMessage = body.error.metadata.raw;
             }
-          } catch(e) {}
-        }
-      } else if (err.responseBody) {
-        try {
-          const body = JSON.parse(err.responseBody);
-          if (body.error && body.error.message) {
-            errorMessage = body.error.message;
+          } catch (_e) {
+            // ignore JSON parse failure
           }
-        } catch(e) {}
+        }
+      } else if (error['responseBody']) {
+        try {
+          const body = JSON.parse(error['responseBody'] as string) as {
+            error?: { message?: string };
+          };
+          if (body.error?.message) errorMessage = body.error.message;
+        } catch (_e) {
+          // ignore JSON parse failure
+        }
       }
 
       throw new Error(`LLM Generation Failed: ${errorMessage}`);
     }
   }
 
-  async embed(text: string) {
+  async embed(text: string): Promise<EmbedResult> {
     const { getEmbedding } = await import('@vedix/tool-sdk');
     const res = await getEmbedding(text);
     if (!res.success) {
       throw new Error(res.error || 'Failed to generate embedding');
     }
-    return { embedding: res.vector };
+    return { embedding: res.vector! };
   }
 }

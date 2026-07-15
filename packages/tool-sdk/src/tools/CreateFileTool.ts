@@ -25,7 +25,7 @@ export class CreateFileTool extends Tool {
     }
 
     try {
-      const workspaceRoot = process.env.WORKSPACE_ROOT || path.resolve(process.cwd(), '../../');
+      const workspaceRoot = (args as any).__workspaceRoot || process.env.WORKSPACE_ROOT || path.resolve(process.cwd(), '../../');
       const { safe, resolvedPath } = validateWorkspacePath(workspaceRoot, p);
       if (!safe) {
         return { success: false, error: 'Access denied: path is outside the workspace root.' };

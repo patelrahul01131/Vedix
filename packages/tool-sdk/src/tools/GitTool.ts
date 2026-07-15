@@ -47,7 +47,7 @@ export class GitTool extends Tool {
         return { success: false, error: 'Unsupported git action' };
       }
 
-      const workspaceRoot = process.env.WORKSPACE_ROOT || path.resolve(process.cwd(), '../../');
+      const workspaceRoot = (args as any).__workspaceRoot || process.env.WORKSPACE_ROOT || path.resolve(process.cwd(), '../../');
       const { stdout, stderr } = await execFileAsync('git', gitArgs, { cwd: workspaceRoot });
       
       return { 

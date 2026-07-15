@@ -23,7 +23,7 @@ export class WorkspaceTreeTool implements Tool {
 
   async execute(args: any): Promise<any> {
     try {
-      const workspaceRoot = process.env.WORKSPACE_ROOT || process.cwd();
+      const workspaceRoot = (args as any).__workspaceRoot || process.env.WORKSPACE_ROOT || process.cwd();
       const p = args.dirPath || '.';
       const targetPath = p === '.' ? workspaceRoot : path.resolve(workspaceRoot, p);
       const maxDepth = args.maxDepth || 2;

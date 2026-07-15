@@ -221,10 +221,13 @@ body {
 .vedix-chat-area {
   flex-grow: 1;
   overflow-y: auto;
+  overflow-x: hidden; /* Prevent any child from creating a horizontal scrollbar */
   padding: 16px;
   display: flex;
   flex-direction: column;
   gap: 16px;
+  /* Contain all children — nothing should paint outside this box */
+  contain: layout;
 }
 
 .empty-state {
@@ -250,23 +253,54 @@ body {
 
 .message-bubble {
   max-width: 85%;
+  min-width: 0;          /* Allow shrinking below intrinsic size */
+  width: fit-content;    /* Shrink-wrap content but never exceed max-width */
   padding: 8px 12px;
   border-radius: 6px;
   line-height: 1.6;
-  font-size: 1.05em; /* Slightly bigger font */
+  font-size: 1.05em;
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  /* Prevent any content (tables, images, code) from breaking out */
+  overflow: hidden;
+  word-break: break-word;
+  overflow-wrap: break-word;
+}
+
+/* Tables: wrap in a horizontally-scrollable container so wide tables
+   scroll within the bubble instead of overflowing it */
+.message-bubble .table-wrapper {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  border-radius: 4px;
+  margin: 10px 0;
 }
 
 .message-bubble table {
   border-collapse: collapse;
+  /* min-content width ensures table uses only what it needs;
+     100% makes it fill the wrapper when the wrapper is wide enough */
   width: 100%;
-  margin: 10px 0;
+  min-width: 0;
+  margin: 0; /* margin moved to wrapper */
+  table-layout: auto;
+}
+
+/* If no wrapper is present (raw markdown renderer), still prevent bust-out */
+.message-bubble > table {
+  display: block;
+  overflow-x: auto;
+  max-width: 100%;
 }
 
 .message-bubble th, .message-bubble td {
   border: 1px solid var(--border-color);
   padding: 6px 12px;
   text-align: left;
+  white-space: normal;     /* Allow wrapping inside cells */
+  word-break: break-word;  /* Break long words in cells */
+  min-width: 60px;         /* Prevent zero-width columns */
+  max-width: 260px;        /* Cap any single column from getting absurdly wide */
 }
 
 .message-bubble th {
@@ -458,9 +492,11 @@ body {
   background-color: var(--vscode-editor-background);
   padding: 12px;
   border-radius: 6px;
-  overflow-x: auto;
+  overflow-x: auto;        /* Scroll wide code blocks horizontally */
+  max-width: 100%;         /* Never exceed bubble width */
   border: 1px solid var(--vscode-widget-border);
   margin: 10px 0;
+  box-sizing: border-box;
 }
 
 .message-bubble code {
@@ -715,12 +751,12 @@ body {
   color: var(--vscode-list-activeSelectionForeground);
 }
 
-/* Markdown Table Styles */
+/* Markdown Table Styles — second declaration (overrides above for specificity) */
 .message-bubble table {
   border-collapse: collapse;
-  width: 100%;
-  margin-top: 10px;
-  margin-bottom: 10px;
+  /* Do NOT set width: 100% here — let the table-wrapper control width */
+  margin-top: 0;
+  margin-bottom: 0;
 }
 
 .message-bubble th,
@@ -728,6 +764,8 @@ body {
   border: 1px solid var(--border-color, #ccc);
   padding: 8px;
   text-align: left;
+  white-space: normal;
+  word-break: break-word;
 }
 
 .message-bubble th {
