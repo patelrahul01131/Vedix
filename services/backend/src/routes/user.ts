@@ -38,7 +38,8 @@ export default async function userRoutes(fastify: FastifyInstance) {
 
       const memories = await (db as any).agentMemory.findMany({
         where: whereClause,
-        orderBy: { createdAt: 'desc' }
+        orderBy: { createdAt: 'desc' },
+        take: 100 // Pagination guard — prevents unbounded queries as memory count grows
       });
       return reply.send({ memories });
     } catch (error) {

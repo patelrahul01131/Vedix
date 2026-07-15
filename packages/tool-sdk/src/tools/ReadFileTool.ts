@@ -1,6 +1,7 @@
 import { Tool, ToolSchema } from '../Tool';
 import * as fs from 'fs/promises';
 import * as path from 'path';
+import { validateWorkspacePath } from '../utils/pathSecurity';
 
 export class ReadFileTool extends Tool {
   readonly name = 'read_file';
@@ -23,7 +24,10 @@ export class ReadFileTool extends Tool {
 
     try {
       const workspaceRoot = process.env.WORKSPACE_ROOT || path.resolve(process.cwd(), '../../');
-      const resolvedPath = path.resolve(workspaceRoot, p);
+      const { safe, resolvedPath } = validateWorkspacePath(workspaceRoot, p);
+      if (!safe) {
+        return { success: false, error: 'Access denied: path is outside the workspace root.' };
+      }
       
       const content = await fs.readFile(resolvedPath, 'utf8');
       return { success: true, content, message: `Successfully read ${resolvedPath}` };

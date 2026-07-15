@@ -69,27 +69,42 @@ export default async function adminRoutes(fastify: FastifyInstance) {
       const totalMessages = await db.message.count();
       const totalMemories = await (db as any).agentMemory.count();
       
-      // Calculate last 7 days of mission activity
-      const missionActivity = [];
-      const memoryGrowth = [];
-      const now = new Date();
+      // Calculate last 7 days of mission activity efficiently using GROUP BY
+      const sevenDaysAgo = new Date();
+      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
       
+      const missionsByDay = await db.$queryRaw`
+        SELECT DATE_TRUNC('day', "createdAt") as date, COUNT(*)::int as count
+        FROM "Mission"
+        WHERE "createdAt" >= ${sevenDaysAgo}
+        GROUP BY DATE_TRUNC('day', "createdAt")
+        ORDER BY date ASC;
+      ` as any[];
+
+      const memoriesByDay = await db.$queryRaw`
+        SELECT DATE_TRUNC('day', "createdAt") as date, COUNT(*)::int as count
+        FROM "AgentMemory"
+        WHERE "createdAt" >= ${sevenDaysAgo}
+        GROUP BY DATE_TRUNC('day', "createdAt")
+        ORDER BY date ASC;
+      ` as any[];
+
+      const missionActivity = new Array(7).fill(0);
+      const memoryGrowth = new Array(7).fill(0);
+      
+      const now = new Date();
       let cumulativeMemories = 0;
       
       for (let i = 6; i >= 0; i--) {
-        const startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i);
-        const endDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i + 1);
+        const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i);
+        const dayString = d.toISOString().split('T')[0];
         
-        const dayMissions = await db.mission.count({
-          where: { createdAt: { gte: startDate, lt: endDate } }
-        });
-        missionActivity.push(dayMissions);
+        const mCount = missionsByDay.find(r => new Date(r.date).toISOString().split('T')[0] === dayString)?.count || 0;
+        missionActivity[6 - i] = mCount;
         
-        const dayMemories = await (db as any).agentMemory.count({
-          where: { createdAt: { gte: startDate, lt: endDate } }
-        });
-        cumulativeMemories += dayMemories;
-        memoryGrowth.push(cumulativeMemories);
+        const memCount = memoriesByDay.find(r => new Date(r.date).toISOString().split('T')[0] === dayString)?.count || 0;
+        cumulativeMemories += memCount;
+        memoryGrowth[6 - i] = cumulativeMemories;
       }
       
       return reply.send({
@@ -178,9 +193,16 @@ export default async function adminRoutes(fastify: FastifyInstance) {
       
       const jobs = await memoryQueue.getJobs(['waiting', 'active', 'failed', 'delayed'], 0, 20);
 
+      const formattedJobs = await Promise.all(jobs.map(async j => ({
+        id: j.id,
+        name: j.name,
+        status: await j.getState(),
+        data: j.data
+      })));
+
       return reply.send({
         stats: { waiting, active, completed, failed },
-        jobs: jobs.map(j => ({ id: j.id, name: j.name, status: j.id, data: j.data }))
+        jobs: formattedJobs
       });
     } catch (error) {
       return reply.code(500).send({ error: 'Failed to fetch queue stats' });

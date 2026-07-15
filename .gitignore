@@ -7,12 +7,19 @@ out/
 build/
 .turbo/
 
-# Environment variables
+# Environment variables — never commit secrets
 .env
 .env.local
 .env.development.local
 .env.test.local
 .env.production.local
+# Also cover all nested service .env files
+**/.env
+**/.env.local
+**/.env.*.local
+# Keep example templates
+!.env.example
+!**/.env.example
 
 # Database/Data storage
 .lancedb/

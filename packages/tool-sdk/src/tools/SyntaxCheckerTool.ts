@@ -34,7 +34,8 @@ export class SyntaxCheckerTool extends Tool {
         command = `node --check "${resolvedPath}"`;
       } else if (ext === '.ts' || ext === '.tsx') {
         // Quick syntax check for TS (skips type checking to be fast)
-        command = `npx tsc --noEmit --allowJs "${resolvedPath}"`;
+        const tscPath = path.join(workspaceRoot, 'node_modules', '.bin', 'tsc');
+        command = `"${tscPath}" --noEmit --allowJs "${resolvedPath}"`;
       } else if (ext === '.py') {
         command = `python -m py_compile "${resolvedPath}"`;
       } else {

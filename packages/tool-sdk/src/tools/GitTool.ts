@@ -1,9 +1,9 @@
 import { Tool, ToolSchema } from '../Tool';
-import { exec } from 'child_process';
+import { execFile } from 'child_process';
 import { promisify } from 'util';
 import * as path from 'path';
 
-const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
 
 export class GitTool extends Tool {
   readonly name = 'git_action';
@@ -33,24 +33,22 @@ export class GitTool extends Tool {
 
   async execute(args: { action: string, files?: string[], message?: string }): Promise<any> {
     try {
-      let command = '';
+      let gitArgs: string[] = [];
       
       if (args.action === 'status') {
-        command = 'git status -s';
+        gitArgs = ['status', '-s'];
       } else if (args.action === 'add') {
-        const filesToStage = args.files?.join(' ') || '.';
-        command = `git add ${filesToStage}`;
+        const filesToStage = args.files && args.files.length > 0 ? args.files : ['.'];
+        gitArgs = ['add', ...filesToStage];
       } else if (args.action === 'commit') {
         if (!args.message) return { success: false, error: 'Commit message required' };
-        // Escape quotes for bash/powershell
-        const msg = args.message.replace(/"/g, '\\"');
-        command = `git commit -m "${msg}"`;
+        gitArgs = ['commit', '-m', args.message];
       } else {
         return { success: false, error: 'Unsupported git action' };
       }
 
       const workspaceRoot = process.env.WORKSPACE_ROOT || path.resolve(process.cwd(), '../../');
-      const { stdout, stderr } = await execAsync(command, { cwd: workspaceRoot });
+      const { stdout, stderr } = await execFileAsync('git', gitArgs, { cwd: workspaceRoot });
       
       return { 
         success: true, 

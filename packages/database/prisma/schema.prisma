@@ -1,10 +1,12 @@
 generator client {
-  provider = "prisma-client-js"
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  extensions = [vector]
 }
 
 model User {
@@ -54,6 +56,8 @@ model Message {
   missionId   String
   mission     Mission  @relation(fields: [missionId], references: [id], onDelete: Cascade)
   createdAt   DateTime @default(now())
+
+  @@index([missionId, createdAt])
 }
 
 model Memory {
@@ -70,11 +74,12 @@ model AgentMemory {
   id          String   @id @default(uuid())
   userId      String   
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  type        String   // 'EXPERIENCE', 'ERROR', 'SUCCESS', 'SKILL', 'PATTERN'
+  type        String   // 'SKILL', 'ERROR', 'PREFERENCE', 'RULE', 'BEHAVIOR', 'PROFILE'
   content     String   // The extracted memory text
   confidence  Int      @default(50) // Score from 0 to 100 for memory decay
   status      String   @default("PENDING") // 'PENDING', 'APPROVED', 'REJECTED'
   embedding   Json?    // Stores embedding as float array for local Node.js RAG
+  embeddingVector Unsupported("vector(2048)")?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 }

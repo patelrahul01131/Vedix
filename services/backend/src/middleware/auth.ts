@@ -2,7 +2,14 @@ import { FastifyRequest, FastifyReply } from 'fastify';
 import jwt from 'jsonwebtoken';
 import { db } from '@vedix/database';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'super-secret-key-change-in-prod';
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET) {
+  throw new Error(
+    '[FATAL] JWT_SECRET environment variable is not set. ' +
+    'The server cannot start without a secret key. ' +
+    'Add JWT_SECRET=<a long random string> to services/backend/.env'
+  );
+}
 
 export const verifyJWT = async (request: FastifyRequest, reply: FastifyReply) => {
   try {

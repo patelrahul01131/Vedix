@@ -2,6 +2,7 @@ import { Tool, ToolSchema } from '../Tool';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { SyntaxCheckerTool } from './SyntaxCheckerTool';
+import { validateWorkspacePath } from '../utils/pathSecurity';
 
 export class CreateFileTool extends Tool {
   readonly name = 'write_file';
@@ -25,7 +26,10 @@ export class CreateFileTool extends Tool {
 
     try {
       const workspaceRoot = process.env.WORKSPACE_ROOT || path.resolve(process.cwd(), '../../');
-      const resolvedPath = path.resolve(workspaceRoot, p);
+      const { safe, resolvedPath } = validateWorkspacePath(workspaceRoot, p);
+      if (!safe) {
+        return { success: false, error: 'Access denied: path is outside the workspace root.' };
+      }
       
       if (args.content !== undefined) {
          await fs.writeFile(resolvedPath, args.content, 'utf8');

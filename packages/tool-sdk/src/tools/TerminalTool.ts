@@ -25,8 +25,22 @@ export class TerminalTool extends Tool {
 
     try {
       const workspaceRoot = process.env.WORKSPACE_ROOT || path.resolve(process.cwd(), '../../');
-      const { stdout, stderr } = await execAsync(args.command, { cwd: workspaceRoot });
-      return { 
+      
+      const BLOCKED_PATTERNS = [
+        /rm\s+-rf\s+\//i,
+        /curl.*\|\s*(bash|sh)/i,
+        /wget.*\|\s*(bash|sh)/i,
+      ];
+      if (BLOCKED_PATTERNS.some(pattern => pattern.test(args.command))) {
+        return { success: false, error: 'Command blocked by security policy.' };
+      }
+
+      const { stdout, stderr } = await execAsync(args.command, { 
+        cwd: workspaceRoot,
+        timeout: 30_000,
+        killSignal: 'SIGTERM'
+      });
+      return {
         success: true, 
         stdout: stdout.trim(), 
         stderr: stderr.trim() 

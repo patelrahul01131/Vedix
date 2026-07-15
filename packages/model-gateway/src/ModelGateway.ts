@@ -198,11 +198,11 @@ export class ModelGateway {
   }
 
   async embed(text: string) {
-    const { embed } = await import('ai');
-    const { mistral } = await import('@ai-sdk/mistral');
-    return embed({
-      model: mistral.embedding('mistral-embed'),
-      value: text
-    });
+    const { getEmbedding } = await import('@vedix/tool-sdk');
+    const res = await getEmbedding(text);
+    if (!res.success) {
+      throw new Error(res.error || 'Failed to generate embedding');
+    }
+    return { embedding: res.vector };
   }
 }

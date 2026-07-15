@@ -2,12 +2,12 @@ import 'dotenv/config';
 import fastify from 'fastify';
 import cors from '@fastify/cors';
 import websocket from '@fastify/websocket';
+import rateLimit from '@fastify/rate-limit';
 import { EventBus } from './EventBus';
 import { MissionPlanner } from './Planner';
 import { logger } from './logger';
 import { db } from '@vedix/database';
-import { MemoryCritic } from './MemoryCritic';
-import './queue/memoryQueue'; // Start the queue worker
+import { memoryQueue } from './queue/memoryQueue'; // Queue already started by this import
 
 import authRoutes from './routes/auth';
 import apiKeyRoutes from './routes/apiKeys';
@@ -16,8 +16,12 @@ import userRoutes from './routes/user';
 
 const server = fastify({ logger: true });
 
-server.register(cors, { origin: '*' });
+server.register(cors, { origin: process.env.ALLOWED_ORIGINS?.split(',') || ['http://localhost:3000', 'http://localhost:5173'] });
 server.register(websocket);
+server.register(rateLimit, {
+  max: 60,
+  timeWindow: '1 minute'
+});
 
 // Register API Routes
 server.register(authRoutes, { prefix: '/api/auth' });
@@ -25,9 +29,8 @@ server.register(apiKeyRoutes, { prefix: '/api/keys' });
 server.register(adminRoutes, { prefix: '/api/admin' });
 server.register(userRoutes, { prefix: '/api/user' });
 
-// Initialize our mock event bus and planner
-const eventBus = new EventBus();
-const planner = new MissionPlanner(eventBus);
+// Global planner removed to prevent cross-user state leakage.
+// EventBus and MissionPlanner are now instantiated per-connection.
 
 server.register(async function (fastify) {
   fastify.get('/ws', { websocket: true }, async (connection, req) => {
@@ -50,6 +53,10 @@ server.register(async function (fastify) {
 
     // Attach user to connection or req for further use if needed
     (connection as any).user = apiKey.user;
+
+    // Instantiate per-connection EventBus and Planner for state isolation
+    const eventBus = new EventBus();
+    const planner = new MissionPlanner(eventBus);
 
     // Forward events from the EventBus to the WebSocket client
     const onAgentStatus = (status: string) => {
@@ -274,7 +281,7 @@ server.register(async function (fastify) {
              planner.gateway.modelName = data.model; // Hacky but works for demo
           }
           if (data.workspaceRoot) {
-            process.env.WORKSPACE_ROOT = data.workspaceRoot;
+            planner.workspaceRoot = data.workspaceRoot; // Use instance property, NOT process.env
           }
 
           if (data.text.toLowerCase() === 'approve') {
@@ -284,6 +291,10 @@ server.register(async function (fastify) {
           } else {
             planner.planMission(data.text, data.sessionId, userId).catch(err => server.log.error(err));
           }
+        }
+        
+        if (data.command === 'resolveApproval') {
+          planner.resolveApproval(data.approved === true);
         }
       } catch (err) {
         server.log.error('Failed to parse WebSocket message');
@@ -306,7 +317,14 @@ server.register(async function (fastify) {
 });
 
 server.get('/health', async (request, reply) => {
-  return { status: 'ok', service: 'vedix-backend' };
+  try {
+    await db.$queryRaw`SELECT 1`;
+    // If Redis is down, BullMQ operations will fail, so we should check it too if possible,
+    // but a DB check is the bare minimum for health.
+    return { status: 'ok', service: 'vedix-backend' };
+  } catch (error) {
+    return reply.code(503).send({ status: 'error', message: 'Database unreachable' });
+  }
 });
 
 const start = async () => {
@@ -315,19 +333,21 @@ const start = async () => {
     logger.info('Vedix Backend is running on http://localhost:3001');
     logger.info('WebSocket listening on ws://localhost:3001/ws');
 
-    // Start background MemoryCritic
-    const memoryCritic = new MemoryCritic();
-    setInterval(() => {
-      memoryCritic.processPendingMemories().catch(e => logger.error(`MemoryCritic failed: ${e}`));
-    }, 2 * 60 * 1000);
-
-    // Run Memory Decay once every 24 hours
-    setInterval(() => {
-      memoryCritic.decayMemories().catch(e => logger.error(`Memory Decay failed: ${e}`));
-    }, 24 * 60 * 60 * 1000);
-    
-    // Initial run
-    memoryCritic.processPendingMemories().catch(err => logger.error(`MemoryCritic initial error: ${err}`));
+    // Migration safety: enqueue any PENDING memories that existed before the
+    // event-driven critic system was deployed. New memories are reviewed
+    // immediately via BullMQ jobs triggered by MemoryExtractor — no polling.
+    const pendingMemories = await db.agentMemory.findMany({
+      where: { status: 'PENDING' },
+      select: { id: true }
+    });
+    if (pendingMemories.length > 0) {
+      const memoryIds = pendingMemories.map((m: any) => m.id);
+      await memoryQueue.add('reviewMemoryBatch', { memoryIds }, {
+        attempts: 3,
+        backoff: { type: 'exponential', delay: 5000 }
+      });
+      logger.info(`[Startup] Enqueued ${memoryIds.length} pre-existing PENDING memories for critic review.`);
+    }
   } catch (err) {
     logger.error(err);
     process.exit(1);
