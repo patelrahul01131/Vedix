@@ -180,6 +180,7 @@ export default async function adminRoutes(fastify: FastifyInstance) {
         { name: 'update_working_memory',   description: 'Persist the current task state and plan to working memory' },
         { name: 'syntax_checker',          description: 'Check a file for syntax errors' },
         { name: 'web_search',              description: 'Search the internet for real-world knowledge' },
+        { name: 'system_info',             description: 'Retrieve hardware specifications and OS details' },
       ];
       return reply.send({ tools });
     } catch (error) {

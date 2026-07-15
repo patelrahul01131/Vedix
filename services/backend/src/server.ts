@@ -64,6 +64,10 @@ server.register(async function (fastify) {
     };
     
     const onAgentMessage = (message: any) => {
+      if (tokenBatchTimeout) {
+        clearTimeout(tokenBatchTimeout);
+        flushTokens();
+      }
       connection.socket.send(JSON.stringify({ type: 'message', payload: message }));
     };
 
@@ -84,8 +88,22 @@ server.register(async function (fastify) {
     eventBus.on('debugData', onDebugData);
     eventBus.on('sessionSwitched', onSessionSwitched);
     
+    let tokenBuffer = '';
+    let tokenBatchTimeout: NodeJS.Timeout | null = null;
+    
+    const flushTokens = () => {
+      if (tokenBuffer) {
+        connection.socket.send(JSON.stringify({ type: 'token', payload: tokenBuffer }));
+        tokenBuffer = '';
+      }
+      tokenBatchTimeout = null;
+    };
+
     const onToken = (token: string) => {
-      connection.socket.send(JSON.stringify({ type: 'token', payload: token }));
+      tokenBuffer += token;
+      if (!tokenBatchTimeout) {
+        tokenBatchTimeout = setTimeout(flushTokens, 50); // Batch tokens every 50ms
+      }
     };
     
     const onActivity = (activity: any) => {
@@ -306,6 +324,9 @@ server.register(async function (fastify) {
 
     connection.socket.on('close', () => {
       server.log.info('Client disconnected');
+      if (tokenBatchTimeout) {
+        clearTimeout(tokenBatchTimeout);
+      }
       // Auto-decline any pending approval to prevent leaked promises
       // when a user disconnects while the agent is waiting for permission.
       planner.resolveApproval(false);

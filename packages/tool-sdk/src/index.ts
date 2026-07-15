@@ -11,3 +11,4 @@ export * from './tools/WorkspaceTreeTool';
 export * from './tools/UpdateWorkingMemoryTool';
 export * from './tools/SyntaxCheckerTool';
 export * from './utils/embedding';
+export * from './tools/SystemInfoTool';
