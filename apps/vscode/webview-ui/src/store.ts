@@ -18,8 +18,9 @@ export interface AgentActivity {
 
 export interface AgentState {
   status: string;
-  messages: Array<{ role: string, text: string }>;
+  messages: Array<{ role: string, text: string, sources?: any[] }>;
   streamingText: string;
+  streamingSources: any[] | null;
   ws: WebSocket | null;
   sessions: any[];
   skills: any[];
@@ -49,6 +50,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
   status: 'Idle',
   messages: [],
   streamingText: '',
+  streamingSources: null,
   ws: null,
   sessions: [],
   skills: [],
@@ -68,6 +70,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
       sessions: [],
       activeSessionId: null,
       streamingText: '',
+      streamingSources: null,
       status: 'Idle',
       ws: null
     });
@@ -107,8 +110,10 @@ export const useAgentStore = create<AgentState>((set, get) => ({
         } else if (data.type === 'error') {
           set({ status: `Error: ${data.payload}` });
         } else if (data.type === 'message') {
-          set({ streamingText: '' }); // Clear streaming text when final message arrives
+          set({ streamingText: '', streamingSources: null }); // Clear streaming text when final message arrives
           get().addMessage(data.payload);
+        } else if (data.type === 'turnSources') {
+          set({ streamingSources: data.payload });
         } else if (data.type === 'token') {
           get().appendToken(data.payload);
         } else if (data.type === 'activity') {
@@ -195,7 +200,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
   setStatus: (status: string) => {
     set({ status });
     if (status === 'Idle' || status === 'Completed') {
-      set({ streamingText: '' });
+      set({ streamingText: '', streamingSources: null });
     }
   },
 

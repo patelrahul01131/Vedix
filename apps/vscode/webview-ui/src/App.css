@@ -1085,3 +1085,53 @@ body {
   font-size: 13px;
   line-height: 1.4;
 }
+
+/* Media Generation Skeleton Loader */
+.media-skeleton-loader {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 250px;
+  background: linear-gradient(90deg, rgba(30,41,59,0.5) 0%, rgba(51,65,85,0.5) 50%, rgba(30,41,59,0.5) 100%);
+  background-size: 200% 100%;
+  animation: pulse-gradient 2s infinite ease-in-out;
+  border-radius: 8px;
+  border: 1px dashed var(--vscode-editor-snippetFinalTabstopHighlightBorder);
+  margin-top: 12px;
+  margin-bottom: 12px;
+  color: var(--vscode-editor-foreground);
+  font-family: var(--vscode-font-family);
+  opacity: 0.8;
+}
+
+.media-skeleton-loader svg {
+  width: 48px;
+  height: 48px;
+  margin-bottom: 12px;
+  animation: spin-slow 4s linear infinite;
+  color: var(--vscode-textLink-foreground);
+}
+
+.media-skeleton-loader p {
+  margin: 0;
+  font-size: 14px;
+  letter-spacing: 0.5px;
+  animation: pulse-text 1.5s infinite alternate;
+}
+
+@keyframes pulse-gradient {
+  0% { background-position: 100% 0; }
+  100% { background-position: -100% 0; }
+}
+
+@keyframes pulse-text {
+  0% { opacity: 0.6; }
+  100% { opacity: 1; }
+}
+
+@keyframes spin-slow {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}

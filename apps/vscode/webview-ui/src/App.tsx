@@ -16,7 +16,17 @@ const markdownComponents = {
     <div className="table-wrapper">
       <table {...props} />
     </div>
-  )
+  ),
+  img: ({node, ...props}: any) => {
+    if (props.src && props.src.match(/\.(mp4|webm|mov)$/i)) {
+      return (
+        <video controls autoPlay loop muted style={{ maxWidth: '100%', borderRadius: '8px', marginTop: '8px' }}>
+          <source src={props.src} type="video/mp4" />
+        </video>
+      );
+    }
+    return <img {...props} style={{ maxWidth: '100%', borderRadius: '8px', marginTop: '8px' }} />;
+  }
 };
 
 const ProviderIcon = ({ model }: { model: string }) => {
@@ -152,7 +162,6 @@ const MessageItem = memo(({ msg, isLast, nextMsg, openActivityId, setOpenActivit
     return (
       <div className="message agent status-card">
         <div className="activities-container">
-          <div className="worked-for">Worked for {acts.length} steps</div>
           {acts.map((act: any) => (
             <div key={act.id} className="activity-item">
               <div 
@@ -167,6 +176,16 @@ const MessageItem = memo(({ msg, isLast, nextMsg, openActivityId, setOpenActivit
                 {act.status === 'running' && <div className="spinner-small" />}
                 {act.details && <span className={`chevron ${openActivityId === act.id ? 'open' : ''}`}>›</span>}
               </div>
+              {act.title.includes('generate_media') && act.status === 'running' && (
+                <div className="media-skeleton-loader">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <line x1="12" y1="16" x2="12" y2="12"></line>
+                    <line x1="12" y1="8" x2="12.01" y2="8"></line>
+                  </svg>
+                  <p>Generating Media...</p>
+                </div>
+              )}
               {openActivityId === act.id && act.details && (
                 <div className="activity-details">
                   <pre>{act.details}</pre>
@@ -279,7 +298,7 @@ function App() {
   const chatAreaRef = useRef<HTMLElement>(null);
   const [autoScroll, setAutoScroll] = useState(true);
 
-  const { status, messages, streamingText, connect, sendMessage, sessions, availableModels, currentModel, setModel, activeSessionId, setActiveSessionId, createSession, updateSessionTitle, deleteSession } = useAgentStore()
+  const { status, messages, streamingText, streamingSources, connect, sendMessage, sessions, availableModels, currentModel, setModel, activeSessionId, setActiveSessionId, createSession, updateSessionTitle, deleteSession } = useAgentStore()
   const isWorking = status !== 'Idle' && status !== 'Completed';
 
   useEffect(() => {
@@ -581,11 +600,25 @@ function App() {
           <div className="message agent">
             <div className="message-bubble">
               <ReactMarkdown 
-                remarkPlugins={markdownRemarkPlugins}
+                remarkPlugins={markdownRemarkPlugins} 
+                rehypePlugins={markdownRehypePlugins}
                 components={markdownComponents}
               >
-                {streamingText + '\n'}
+                {streamingText}
               </ReactMarkdown>
+              
+              {streamingSources && streamingSources.length > 0 && (
+                <div className="message-sources-pill" onClick={() => setOpenSourcesModal(streamingSources)}>
+                  <div className="sources-icons">
+                    {streamingSources.slice(0, 3).map((s: any, idx: number) => (
+                      <div key={idx} className="source-icon">
+                        <img src={`https://www.google.com/s2/favicons?domain=${s.domain}&sz=32`} alt={s.domain} />
+                      </div>
+                    ))}
+                  </div>
+                  <span>{streamingSources.length} sources</span>
+                </div>
+              )}
             </div>
           </div>
         )}

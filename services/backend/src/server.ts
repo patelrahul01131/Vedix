@@ -75,6 +75,10 @@ server.register(async function (fastify) {
       connection.socket.send(JSON.stringify({ type: 'debugData', payload: data }));
     };
 
+    const onTurnSources = (sources: any) => {
+      connection.socket.send(JSON.stringify({ type: 'turnSources', payload: sources }));
+    };
+
     const onSessionSwitched = async (id: string) => {
       connection.socket.send(JSON.stringify({ type: 'sessionSwitched', payload: id }));
       const userId = (connection as any).user.id;
@@ -86,6 +90,7 @@ server.register(async function (fastify) {
     eventBus.on('status', onAgentStatus);
     eventBus.on('message', onAgentMessage);
     eventBus.on('debugData', onDebugData);
+    eventBus.on('turnSources', onTurnSources);
     eventBus.on('sessionSwitched', onSessionSwitched);
     
     let tokenBuffer = '';
@@ -333,6 +338,7 @@ server.register(async function (fastify) {
       eventBus.off('status', onAgentStatus);
       eventBus.off('message', onAgentMessage);
       eventBus.off('debugData', onDebugData);
+      eventBus.off('turnSources', onTurnSources);
       eventBus.off('sessionSwitched', onSessionSwitched);
       eventBus.off('token', onToken);
       eventBus.off('activity', onActivity);

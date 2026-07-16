@@ -30,7 +30,7 @@ export default function Login() {
       localStorage.setItem('adminToken', response.data.token);
       localStorage.setItem('adminUser', JSON.stringify(user));
       
-      navigate('/dashboard');
+      navigate('/admin/dashboard');
     } catch (err: any) {
       setError(err.response?.data?.error || 'An error occurred');
     } finally {

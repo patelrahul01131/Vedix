@@ -6,8 +6,8 @@ export const QueueDashboard = () => {
 
   const fetchStats = async () => {
     try {
-      const token = localStorage.getItem('vedix_token');
-      const res = await fetch('http://localhost:3000/api/admin/queue-stats', {
+      const token = localStorage.getItem('adminToken');
+      const res = await fetch('/api/admin/queue-stats', {
         headers: { Authorization: `Bearer ${token}` }
       });
       const data = await res.json();
@@ -27,9 +27,9 @@ export const QueueDashboard = () => {
   }, []);
 
   return (
-    <div className="admin-dashboard">
-      <h2>Queue Dashboard</h2>
-      <p>Real-time memory extraction queue statistics (BullMQ)</p>
+    <div>
+      <h1 style={{ marginBottom: '8px', fontSize: '2rem', fontWeight: 'bold' }}>Queue Dashboard</h1>
+      <p style={{ color: 'var(--text-secondary)', marginBottom: '32px' }}>Real-time memory extraction queue statistics (BullMQ)</p>
 
       {stats && (
         <div className="stats-grid" style={{ display: 'flex', gap: '20px', marginBottom: '20px' }}>
@@ -52,16 +52,17 @@ export const QueueDashboard = () => {
         </div>
       )}
 
-      <h3>Recent Jobs</h3>
-      <table className="admin-table">
-        <thead>
-          <tr>
-            <th>ID</th>
-            <th>Name</th>
-            <th>Status</th>
-            <th>Data</th>
-          </tr>
-        </thead>
+      <h3 style={{ fontSize: '1.5rem', fontWeight: '600', marginBottom: '16px' }}>Recent Jobs</h3>
+      <div className="glass-panel" style={{ padding: 0, overflow: 'hidden' }}>
+        <table className="data-table">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Name</th>
+              <th>Status</th>
+              <th>Data</th>
+            </tr>
+          </thead>
         <tbody>
           {jobs.map(job => (
             <tr key={job.id}>
@@ -79,9 +80,10 @@ export const QueueDashboard = () => {
             <tr>
               <td colSpan={4} style={{ textAlign: 'center' }}>No recent jobs</td>
             </tr>
-          )}
-        </tbody>
-      </table>
+            )}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 };

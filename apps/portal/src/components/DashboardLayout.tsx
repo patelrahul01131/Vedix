@@ -12,16 +12,26 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ title = 'Vedix User P
   const token = localStorage.getItem('token');
 
   useEffect(() => {
-    if (token) {
-      axios.get('/api/user/profile', {
-        headers: { Authorization: `Bearer ${token}` }
-      }).then(res => {
-        if (res.data.user && res.data.user.email) {
-          setUserEmail(res.data.user.email);
-        }
-      }).catch(err => console.error(err));
+    if (!token) {
+      navigate('/login');
+      return;
     }
-  }, [token]);
+
+    axios.get('/api/user/profile', {
+      headers: { Authorization: `Bearer ${token}` }
+    }).then(res => {
+      if (res.data.user && res.data.user.email) {
+        setUserEmail(res.data.user.email);
+      }
+    }).catch(err => {
+      console.error(err);
+      if (err.response?.status === 401 || err.response?.status === 403) {
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+        navigate('/login');
+      }
+    });
+  }, [token, navigate]);
 
   const handleLogout = () => {
     localStorage.removeItem('token');

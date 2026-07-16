@@ -46,6 +46,7 @@ function App() {
           <Route path="tokens" element={<TokenEconomics />} />
         </Route>
         
+        <Route path="/admin/*" element={<Navigate to="/admin/login" replace />} />
         <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
     </BrowserRouter>

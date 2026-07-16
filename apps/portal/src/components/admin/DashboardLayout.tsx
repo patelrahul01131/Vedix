@@ -12,16 +12,26 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ title = 'Vedix Admin 
   const token = localStorage.getItem('adminToken');
 
   useEffect(() => {
-    if (token) {
-      axios.get('/api/user/profile', {
-        headers: { Authorization: `Bearer ${token}` }
-      }).then(res => {
-        if (res.data.user && res.data.user.email) {
-          setUserEmail(res.data.user.email);
-        }
-      }).catch(err => console.error(err));
+    if (!token) {
+      navigate('/admin/login');
+      return;
     }
-  }, [token]);
+
+    axios.get('/api/user/profile', {
+      headers: { Authorization: `Bearer ${token}` }
+    }).then(res => {
+      if (res.data.user && res.data.user.email) {
+        setUserEmail(res.data.user.email);
+      }
+    }).catch(err => {
+      console.error(err);
+      if (err.response?.status === 401 || err.response?.status === 403) {
+        localStorage.removeItem('adminToken');
+        localStorage.removeItem('adminUser');
+        navigate('/admin/login');
+      }
+    });
+  }, [token, navigate]);
 
   const handleLogout = () => {
     localStorage.removeItem('adminToken');

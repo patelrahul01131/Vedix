@@ -1,8 +1,9 @@
 export * from './Tool';
 export * from './tools/CreateFileTool';
-export * from './tools/UpdateFileTool';
-export * from './tools/ReadFileTool';
-export * from './tools/DeleteFileTool';
+export { UpdateFileTool } from './tools/UpdateFileTool';
+export { ReadFileTool } from './tools/ReadFileTool';
+export { DeleteFileTool } from './tools/DeleteFileTool';
+export { GenerateMediaTool } from './tools/GenerateMediaTool';
 export * from './tools/TerminalTool';
 export * from './tools/WebSearchTool';
 export * from './tools/GitTool';

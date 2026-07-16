@@ -42,7 +42,7 @@ Your job is to scan a conversation and decide:
 2. If yes, what SPECIFIC categories exist?
 
 Memory categories:
-- SKILL: A reusable technical workflow, deployment step, or code pattern was discussed in detail.
+- SKILL: A uniquely defined, user-specific technical workflow, deployment step, or custom code pattern. DO NOT extract generic programming knowledge (e.g., standard algorithms, basic API usage, or one-off scripts).
 - ERROR: The agent made a mistake and then corrected it, or a bug was diagnosed and fixed.
 - PREFERENCE: The user stated or revealed a preference for a tool, language, framework, or style.
 - RULE: The user stated a hard constraint, safety rule, or operational policy.
@@ -51,7 +51,6 @@ Memory categories:
 
 STRICT RULES:
 - Return { shouldExtract: false } for: greetings, chitchat, single questions with no personal context, status checks ("is X working?"), ephemeral debugging sessions with no permanent learning.
-- Return { shouldExtract: false } for conversations under 4 messages.
 - Only include a category if you are CONFIDENT the conversation has extractable facts for it.
 - Never include SKILL for a one-off task. Only for a pattern worth repeating.
 - PREFERENCE requires the user to have explicitly stated a choice, not just used something once.
@@ -189,9 +188,9 @@ Provide a concise, updated summary in 3-5 sentences.`;
         m.role === 'user' || m.role === 'agent' || m.role === 'assistant'
       );
 
-      if (conversationalMsgs.length < 3) {
+      if (conversationalMsgs.length < 2) {
         logger.info(
-          `[ExtractionGate] Skipping mission ${missionId} — only ${conversationalMsgs.length} conversational messages (min 3).`
+          `[ExtractionGate] Skipping mission ${missionId} — only ${conversationalMsgs.length} conversational messages (min 2).`
         );
         return [];
       }
@@ -227,18 +226,35 @@ Provide a concise, updated summary in 3-5 sentences.`;
       );
 
       // ── Step 2: Targeted Extraction ────────────────────────────────────────
-      // Fetch existing memories for deduplication context.
-      const existingMemories = await (db as any).agentMemory.findMany({
-        where: {
-          userId,
-          // Only fetch memories of the categories we're about to extract
-          // This dramatically reduces the dedup context window and token usage
-          ...(gate.categories.length > 0 ? { type: { in: gate.categories } } : {}),
-        },
-        select: { id: true, type: true, content: true },
-        take: 50,
-        orderBy: { updatedAt: 'desc' },
-      });
+      // Generate an embedding for the conversational transcript to perform vector search
+      let existingMemories: any[] = [];
+      try {
+        const embedRes = await this.gateway.embed(compactTranscript);
+        if (embedRes && embedRes.embedding) {
+          const vector = embedRes.embedding;
+          // Use semantic search to fetch relevant memories across ALL categories for deduplication
+          existingMemories = await (db as any).$queryRaw`
+            SELECT id, type, content
+            FROM "AgentMemory"
+            WHERE "userId" = ${userId}
+              AND "embeddingVector" IS NOT NULL
+            ORDER BY "embeddingVector" <=> ${JSON.stringify(vector)}::vector
+            LIMIT 30;
+          `;
+        }
+      } catch (embedErr) {
+        logger.warn(`Failed to generate embedding for extraction dedup context, falling back to recent memories: ${embedErr}`);
+      }
+
+      // Fallback: If vector search fails or returns nothing, fetch recent memories as fallback
+      if (!existingMemories || existingMemories.length === 0) {
+        existingMemories = await (db as any).agentMemory.findMany({
+          where: { userId },
+          select: { id: true, type: true, content: true },
+          take: 30,
+          orderBy: { updatedAt: 'desc' },
+        });
+      }
 
       // Full transcript (not truncated) for the actual extraction
       const fullTranscript = dbMsgs
@@ -262,10 +278,10 @@ Provide a concise, updated summary in 3-5 sentences.`;
 
       // Build a FOCUSED taxonomy section — only include the approved categories
       const categoryDescriptions: Record<MemoryCategory, string> = {
-        SKILL:      '1. SKILL: Reusable Technical Workflows (e.g., a specific deployment workflow, a code pattern).',
+        SKILL:      '1. SKILL: Reusable, user-specific Technical Workflows (e.g., a specific deployment workflow, a custom domain pattern). NEVER extract generic programming tasks, basic algorithms (like factorial or sorting), or standard script writing. It must be unique to the user.',
         ERROR:      '2. ERROR: Post-Mortems (e.g., a mistake the agent made and the correct fix).',
-        PREFERENCE: '3. PREFERENCE: User-specific choices (e.g., "I use MongoDB", "I prefer tabs").',
-        RULE:       '4. RULE: Hard safety or operational constraints (e.g., "Never store passwords in plaintext").',
+        PREFERENCE: '3. PREFERENCE: User-specific choices (e.g., "I use MongoDB", "I prefer tabs", "I want definitions in 3 bullets").',
+        RULE:       '4. RULE: Hard safety or operational constraints (e.g., "Never store passwords in plaintext"). Do NOT use for formatting preferences.',
         BEHAVIOR:   '5. BEHAVIOR: Recognized user patterns (e.g., "User frequently forgets database indexes").',
         PROFILE:    '6. PROFILE: Broad user facts (e.g., "User\'s name is Rahul", "User is building an AI agent").',
       };
@@ -290,6 +306,7 @@ CRITICAL RULES:
 - DEDUPLICATION: Cross-reference the EXISTING MEMORIES below. If a fact is already recorded (even with slightly different phrasing), use the "update" action to strengthen it. DO NOT create a duplicate.
 - ANTI-HALLUCINATION: NEVER invent or infer facts. Only extract what is explicitly stated.
 - SESSION SCOPE RULE: NEVER extract the current session's task as a permanent memory. Only extract recurring patterns or explicit permanent declarations.
+- MEANINGFUL REASONS: When providing a "reason" for update, replace, or delete actions, NEVER use generic boilerplate like "Reinforced by explicit user instruction." You MUST describe the specific fact that was modified (e.g., "User confirmed they prefer PostgreSQL over MySQL").
 - CONFIDENCE CALIBRATION for "create" actions:
   - 100: Explicit, permanent user declarations (e.g., "I switched permanently to Cursor").
   - 80: Direct preferences, rules, or safety constraints.
@@ -339,8 +356,8 @@ ${fullTranscript}`;
               if (item.reason) {
                 logger.info(`[MemoryExtractor] Update reason for ${item.id}: ${item.reason}`);
               }
-              const contentStr =
-                typeof item.content === 'string' ? item.content : JSON.stringify(item.content);
+              let contentStr = typeof item.content === 'string' ? item.content : JSON.stringify(item.content);
+              contentStr = contentStr.replace(/^\[[A-Z]+\]\s*/i, '');
 
               let embedding = null;
               try {
@@ -383,8 +400,8 @@ ${fullTranscript}`;
             if (item.reason) {
               logger.info(`[MemoryExtractor] Replace reason for ${item.id}: ${item.reason}`);
             }
-            const contentStr =
-              typeof item.content === 'string' ? item.content : JSON.stringify(item.content);
+            let contentStr = typeof item.content === 'string' ? item.content : JSON.stringify(item.content);
+            contentStr = contentStr.replace(/^\[[A-Z]+\]\s*/i, '');
 
             let embedding = null;
             try {
@@ -429,6 +446,7 @@ ${fullTranscript}`;
             if (typeof contentStr !== 'string') {
               contentStr = JSON.stringify(contentStr);
             }
+            contentStr = contentStr.replace(/^\[[A-Z]+\]\s*/i, '');
 
             let embedding = null;
             try {
@@ -445,6 +463,56 @@ ${fullTranscript}`;
               item.initial_confidence <= 100
             ) {
               initialConfidence = item.initial_confidence;
+            }
+
+            // ── Algorithmic Deduplication Guard ────────────────────────────────
+            let duplicateFound = false;
+            if (embedding && Array.isArray(embedding)) {
+              const vectorString = `[${embedding.join(',')}]`;
+              try {
+                const matches: any[] = await (db as any).$queryRaw`
+                  SELECT id, type, content, confidence,
+                         1 - ("embeddingVector" <=> ${vectorString}::vector) as similarity
+                  FROM "AgentMemory"
+                  WHERE "userId" = ${userId}
+                    AND "embeddingVector" IS NOT NULL
+                  ORDER BY "embeddingVector" <=> ${vectorString}::vector
+                  LIMIT 1;
+                `;
+                
+                if (matches && matches.length > 0 && matches[0].similarity > 0.92) {
+                  duplicateFound = true;
+                  const existingMem = matches[0];
+                  const newConfidence = Math.min(100, (existingMem.confidence || 50) + 10);
+                  
+                  logger.info(
+                    `[Algorithmic Dedup] Caught duplicate during create. Upgrading existing memory ${existingMem.id} (similarity: ${existingMem.similarity.toFixed(3)})`
+                  );
+                  
+                  await (db as any).agentMemory.update({
+                    where: { id: existingMem.id },
+                    data: {
+                      content: contentStr,
+                      embedding: embedding,
+                      confidence: newConfidence,
+                      updatedAt: new Date()
+                    }
+                  }).catch(() => {});
+
+                  // Update pgvector for the modified embedding
+                  const updateVectorString = `[${embedding.join(',')}]`;
+                  await (db as any).$executeRawUnsafe(
+                    `UPDATE "AgentMemory" SET "embeddingVector" = $1::vector WHERE id = $2`,
+                    updateVectorString,
+                    existingMem.id
+                  ).catch((e: any) => logger.warn(`Failed to update pgvector embedding during algorithmic dedup: ${e.message}`));
+                  
+                  // Skip the creation of the duplicate
+                  continue;
+                }
+              } catch (dedupErr) {
+                logger.warn(`Failed to execute algorithmic dedup vector search: ${dedupErr}`);
+              }
             }
 
             const newMem = await (db as any).agentMemory.create({

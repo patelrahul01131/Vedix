@@ -37,7 +37,7 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ title = 'Vedix User P
           <span style={{ color: 'var(--accent-color)', fontSize: '24px' }}>⚡</span>
           Vedix Portal
         </div>
-        
+        <nav className="sidebar-nav">
           <NavLink to="/agent-monitor" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
             AI Agent Monitor
           </NavLink>

@@ -19,6 +19,9 @@ async function main() {
     await prisma.agentState.deleteMany({});
     console.log('✅ Cleared AgentState table');
 
+    await prisma.tokenLog.deleteMany({});
+    console.log('✅ Cleared TokenLog table');
+
     console.log('Database reset successfully!');
   } catch (error) {
     console.error('Error resetting database:', error);
