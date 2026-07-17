@@ -20,6 +20,14 @@ model User {
   missions     Mission[]
   memories     Memory[]
   agentMemories AgentMemory[]
+  memoryExtractionQueues MemoryExtractionQueue[]
+  explicitPreferences    UserExplicitPreference[]
+  
+  // Web App Relations
+  webMissions    WebMission[]
+  webSettings    WebUserSettings?
+  analyticsLogs  WebAnalyticsLog[]
+  oauthConnections OAuthConnection[]
 }
 
 model ApiKey {
@@ -99,4 +107,111 @@ model AgentState {
   id        String   @id @default("global_state")
   status    String   @default("Offline")
   updatedAt DateTime @updatedAt
+}
+
+// --- WEB APP MODELS ---
+
+model WebMission {
+  id            String       @id @default(uuid())
+  userId        String?   
+  user          User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
+  title         String
+  status        String       @default("Idle")
+  summary       String?      
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+  messages      WebMessage[]
+}
+
+model WebMessage {
+  id          String     @id @default(uuid())
+  role        String     // 'user', 'assistant', 'tool', 'system'
+  content     String?  
+  missionId   String
+  mission     WebMission @relation(fields: [missionId], references: [id], onDelete: Cascade)
+  createdAt   DateTime   @default(now())
+
+  @@index([missionId, createdAt])
+}
+
+model WebUserSettings {
+  id              String   @id @default(uuid())
+  userId          String   @unique
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  temperature     Float    @default(0.72)
+  topP            Float    @default(0.95)
+  webSearch       Boolean  @default(true)
+  codeInterpreter Boolean  @default(true)
+  thirdParty      Boolean  @default(false)
+  gmailEnabled    Boolean  @default(false)
+  canvaEnabled    Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model WebAnalyticsLog {
+  id          String   @id @default(uuid())
+  userId      String?
+  user        User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  modelName   String
+  status      String   @default("SUCCESS") // 'SUCCESS', 'ERROR'
+  latencyMs   Int      @default(0)
+  tokens      Int      @default(0)
+  cost        Float    @default(0.0)
+  createdAt   DateTime @default(now())
+}
+
+model OAuthConnection {
+  id           String   @id @default(uuid())
+  userId       String
+  provider     String   // e.g., 'google', 'canva', 'notion'
+  providerId   String   // the user's ID on that provider
+  email        String?  // the email associated with the 3rd party account
+  
+  accessToken  String   @db.Text
+  refreshToken String?  @db.Text
+  expiresAt    DateTime?
+  
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@unique([userId, provider]) // one connection per provider per user
+}
+
+// --- UNIFIED ASYNC MEMORY PIPELINE ---
+
+model MemoryExtractionQueue {
+  id              String   @id @default(uuid())
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  userMessage     String   @db.Text
+  agentResponse   String   @db.Text
+  source          String   // e.g., 'WEB', 'EXTENSION'
+  
+  status          String   @default("PENDING") // 'PENDING', 'PROCESSING', 'COMPLETED'
+  attempts        Int      @default(0)
+  
+  createdAt       DateTime @default(now())
+  
+  @@index([status, createdAt])
+}
+
+model UserExplicitPreference {
+  id          String   @id @default(uuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  category    String   
+  rule        String   @db.Text 
+  source      String   // 'WEB' or 'EXTENSION'
+  isActive    Boolean  @default(true)
+  
+  confidence  Int      @default(50)
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([userId, category])
 }

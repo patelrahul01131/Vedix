@@ -47,6 +47,21 @@ export default async function userRoutes(fastify: FastifyInstance) {
     }
   });
 
+  fastify.get('/learning', async (request, reply) => {
+    try {
+      const userId = (request as any).user.id;
+      
+      const learning = await db.userExplicitPreference.findMany({
+        where: { userId },
+        orderBy: { updatedAt: 'desc' },
+      });
+      return reply.send({ learning });
+    } catch (error) {
+      return reply.code(500).send({ error: 'Failed to fetch learning preferences' });
+    }
+  });
+
+
   fastify.get('/missions', async (request, reply) => {
     try {
       const userId = (request as any).user.id;

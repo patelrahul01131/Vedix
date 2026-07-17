@@ -4,6 +4,7 @@ import DashboardLayout from './components/DashboardLayout';
 import Dashboard from './pages/Dashboard';
 import Settings from './pages/Settings';
 import Profile from './pages/Profile';
+import AgentLearning from './pages/AgentLearning';
 
 // Admin imports
 import AdminLogin from './pages/admin/Login';
@@ -28,6 +29,7 @@ function App() {
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/profile" element={<Profile />} />
           <Route path="/settings" element={<Settings />} />
+          <Route path="/learning" element={<AgentLearning />} />
           <Route path="/" element={<Navigate to="/dashboard" replace />} />
         </Route>
 

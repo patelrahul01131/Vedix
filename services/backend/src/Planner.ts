@@ -229,6 +229,20 @@ export class MissionPlanner {
             userProfiles = profiles.map((s: any) => `[${s.type} - Confidence ${s.confidence}/100]: ${s.content}`).join('\n\n');
           }
         }
+        
+        // ---- UNIFIED MEMORY INTEGRATION (Hard Rules) ----
+        try {
+          const explicitPrefs = await (db as any).userExplicitPreference.findMany({
+            where: { userId: userId, isActive: true },
+            orderBy: { confidence: 'desc' }
+          });
+          if (explicitPrefs && explicitPrefs.length > 0) {
+            const prefStrings = explicitPrefs.map((p: any) => `[USER EXPLICIT RULE - ${p.category}]: ${p.rule}`);
+            behavioralConstraints += (behavioralConstraints ? '\n\n' : '') + prefStrings.join('\n\n');
+          }
+        } catch (memErr) {
+          console.error(`Failed to fetch UserExplicitPreferences:`, memErr);
+        }
       }
 
       let lastThinkingStart = Date.now();

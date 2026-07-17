@@ -1,0 +1,154 @@
+/* Vedix Chat — Global Styles with Tailwind v4 */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --color-bg-base: #0A0A0B;
+  --color-bg-sidebar: #101014;
+  --color-bg-card: #17171C;
+  --color-bg-hover: #202027;
+  --color-primary: #7C3AED;
+  --color-text-primary: #FFFFFF;
+  --color-text-secondary: #A1A1AA;
+}
+
+:root {
+  --sidebar-width: 300px;
+  --topnav-height: 56px;
+  color-scheme: dark;
+}
+
+
+html, body, #root {
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+}
+
+body {
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  background: var(--color-bg-base, #0A0A0B);
+  color: var(--color-text-primary, #FFFFFF);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #333; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #555; }
+
+/* Markdown prose styles for chat messages */
+.prose-chat { line-height: 1.75; }
+.prose-chat h1 { font-size: 1.5rem; font-weight: 700; margin-bottom: 0.75rem; margin-top: 1.5rem; }
+.prose-chat h2 { font-size: 1.25rem; font-weight: 600; margin-bottom: 0.5rem; margin-top: 1.25rem; }
+.prose-chat h3 { font-size: 1.1rem; font-weight: 600; margin-bottom: 0.5rem; margin-top: 1rem; }
+.prose-chat p { margin-bottom: 0.75rem; }
+.prose-chat p:last-child { margin-bottom: 0; }
+.prose-chat ul, .prose-chat ol { margin-left: 1.5rem; margin-bottom: 0.75rem; }
+.prose-chat ul { list-style: disc; }
+.prose-chat ol { list-style: decimal; }
+.prose-chat li { margin-bottom: 0.25rem; }
+.prose-chat a { color: #818cf8; text-decoration: underline; }
+.prose-chat a:hover { color: #a5b4fc; }
+.prose-chat blockquote {
+  border-left: 3px solid #374151;
+  padding-left: 1rem;
+  color: #9ca3af;
+  margin: 0.75rem 0;
+  font-style: italic;
+}
+.prose-chat strong { font-weight: 600; color: #f9fafb; }
+.prose-chat em { font-style: italic; color: #d1d5db; }
+.prose-chat hr { border: none; border-top: 1px solid #1f2937; margin: 1.5rem 0; }
+.prose-chat table { width: 100%; border-collapse: collapse; margin-bottom: 1rem; font-size: 0.875rem; }
+.prose-chat th {
+  background: #1f2937;
+  padding: 0.5rem 0.75rem;
+  text-align: left;
+  font-weight: 600;
+  border: 1px solid #374151;
+  color: #f3f4f6;
+}
+.prose-chat td {
+  padding: 0.5rem 0.75rem;
+  border: 1px solid #374151;
+  color: #d1d5db;
+}
+.prose-chat tr:nth-child(even) td { background: #111827; }
+.prose-chat code {
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-size: 0.85em;
+  background: #1a1a2e;
+  color: #a5b4fc;
+  padding: 0.15em 0.4em;
+  border-radius: 4px;
+  border: 1px solid #2d2d44;
+}
+.prose-chat pre {
+  background: #111827;
+  border: 1px solid #1f2937;
+  border-radius: 10px;
+  overflow-x: auto;
+  margin: 0.75rem 0;
+  position: relative;
+}
+.prose-chat pre code {
+  background: transparent;
+  border: none;
+  padding: 1rem 1.25rem;
+  display: block;
+  color: #e2e8f0;
+  font-size: 0.875rem;
+  line-height: 1.7;
+}
+
+/* Thinking animation dots */
+@keyframes bounce-dot {
+  0%, 80%, 100% { transform: translateY(0); opacity: 0.4; }
+  40% { transform: translateY(-6px); opacity: 1; }
+}
+.thinking-dot {
+  animation: bounce-dot 1.4s infinite ease-in-out;
+  display: inline-block;
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: #818cf8;
+}
+.thinking-dot:nth-child(1) { animation-delay: 0s; }
+.thinking-dot:nth-child(2) { animation-delay: 0.2s; }
+.thinking-dot:nth-child(3) { animation-delay: 0.4s; }
+
+/* Streaming cursor blink */
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+.streaming-cursor::after {
+  content: '▋';
+  animation: blink 0.8s infinite;
+  color: #818cf8;
+  margin-left: 1px;
+}
+
+/* Fade in up animation */
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.fade-in-up {
+  animation: fadeInUp 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* Skeleton shimmer */
+@keyframes shimmer {
+  0% { background-position: -200% center; }
+  100% { background-position: 200% center; }
+}
+.skeleton {
+  background: linear-gradient(90deg, #1a1a1a 25%, #252525 50%, #1a1a1a 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+  border-radius: 6px;
+}

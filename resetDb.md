@@ -1,4 +1,4 @@
-cd .\packages\database\
+cd ./packages/database
 npx tsx --env-file=../../.env src/resetDB.ts
 
 To reset only the agent learning memories, run:

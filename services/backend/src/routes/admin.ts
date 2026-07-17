@@ -67,7 +67,9 @@ export default async function adminRoutes(fastify: FastifyInstance) {
       const totalUsers = await db.user.count();
       const totalMissions = await db.mission.count();
       const totalMessages = await db.message.count();
-      const totalMemories = await (db as any).agentMemory.count();
+      const totalOldMemories = await (db as any).agentMemory.count();
+      const totalNewMemories = await (db as any).userExplicitPreference.count();
+      const totalMemories = totalOldMemories + totalNewMemories;
       
       // Calculate last 7 days of mission activity efficiently using GROUP BY
       const sevenDaysAgo = new Date();
@@ -125,16 +127,46 @@ export default async function adminRoutes(fastify: FastifyInstance) {
   fastify.get('/memories', async (request, reply) => {
     try {
       const { search } = request.query as { search?: string };
-      const whereClause = search ? {
+      
+      // Fetch Old Agent Memories
+      const oldWhereClause = search ? {
         content: { contains: search, mode: 'insensitive' as const }
       } : {};
 
-      const memories = await db.agentMemory.findMany({
-        where: whereClause,
+      const oldMemories = await db.agentMemory.findMany({
+        where: oldWhereClause,
         include: { user: { select: { email: true } } },
         orderBy: { createdAt: 'desc' }
       });
-      return reply.send({ memories });
+
+      // Fetch New User Explicit Preferences
+      const newWhereClause = search ? {
+        rule: { contains: search, mode: 'insensitive' as const }
+      } : {};
+
+      const newPreferences = await (db as any).userExplicitPreference.findMany({
+        where: newWhereClause,
+        include: { user: { select: { email: true } } },
+        orderBy: { createdAt: 'desc' }
+      });
+
+      // Map New Preferences to match the UI's Memory interface
+      const mappedPreferences = newPreferences.map((pref: any) => ({
+        id: pref.id,
+        type: pref.category || 'PREFERENCE', // Maps category to type
+        content: pref.rule, // Maps rule to content
+        confidence: pref.confidence,
+        status: pref.isActive ? 'APPROVED' : 'PENDING',
+        createdAt: pref.createdAt,
+        user: pref.user
+      }));
+
+      // Combine both lists and sort by date descending
+      const allMemories = [...oldMemories, ...mappedPreferences].sort(
+        (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+      );
+
+      return reply.send({ memories: allMemories });
     } catch (error) {
       return reply.code(500).send({ error: 'Failed to fetch agent memories' });
     }

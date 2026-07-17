@@ -58,6 +58,9 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ title = 'Vedix User P
           <NavLink to="/settings" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
             API Keys
           </NavLink>
+          <NavLink to="/learning" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
+            Agent Learning
+          </NavLink>
         </nav>
       </aside>
 
