@@ -6,6 +6,7 @@ export interface Message {
   createdAt?: string;
   isStreaming?: boolean;
   activities?: any[];
+  attachments?: string[];
 }
 
 export interface Mission {
@@ -40,6 +41,7 @@ export interface ChatStore {
   currentModel: string;
   availableModels: string[];
   prompt: string;
+  attachments: string[];
 
   // Actions
   setActiveMissionId: (id: string | null) => void;
@@ -53,6 +55,9 @@ export interface ChatStore {
   setCurrentModel: (model: string) => void;
   setAvailableModels: (models: string[]) => void;
   setPrompt: (val: string) => void;
+  addAttachment: (val: string) => void;
+  removeAttachment: (index: number) => void;
+  clearAttachments: () => void;
   resetChat: () => void;
 }
 

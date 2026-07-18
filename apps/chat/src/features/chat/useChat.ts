@@ -13,6 +13,8 @@ export function useChat() {
     setActiveMissionId,
     prompt,
     setPrompt,
+    attachments,
+    clearAttachments,
   } = useChatStore();
 
   const queryClient = useQueryClient();
@@ -20,7 +22,7 @@ export function useChat() {
 
   const sendMessage = useCallback(async () => {
     const text = prompt.trim();
-    if (!text) return;
+    if (!text && attachments.length === 0) return;
 
     // Cancel any ongoing stream
     if (abortControllerRef.current) {
@@ -28,7 +30,13 @@ export function useChat() {
     }
 
     setPrompt('');
-    appendMessage({ role: 'user', content: text });
+    const currentAttachments = [...attachments];
+    clearAttachments();
+
+    // If there's an attachment but no text, we should probably add a default text 
+    const finalContent = text || "Check out these files.";
+    
+    appendMessage({ role: 'user', content: finalContent, attachments: currentAttachments });
     appendMessage({ role: 'assistant', content: '', isStreaming: true });
     setIsStreaming(true);
 
@@ -40,9 +48,10 @@ export function useChat() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          message: text,
+          message: finalContent,
           missionId: activeMissionId,
           modelName: currentModel,
+          attachmentsBase64: currentAttachments,
         }),
         signal: controller.signal,
       });
@@ -103,7 +112,7 @@ export function useChat() {
       setIsStreaming(false);
       abortControllerRef.current = null;
     }
-  }, [prompt, activeMissionId, currentModel, appendMessage, updateLastMessage, appendActivity, setIsStreaming, setPrompt, setActiveMissionId, queryClient]);
+  }, [prompt, attachments, activeMissionId, currentModel, appendMessage, updateLastMessage, appendActivity, setIsStreaming, setPrompt, clearAttachments, setActiveMissionId, queryClient]);
 
   const stopGeneration = useCallback(() => {
     if (abortControllerRef.current) {

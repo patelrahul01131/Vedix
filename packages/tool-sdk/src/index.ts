@@ -13,4 +13,6 @@ export * from './tools/UpdateWorkingMemoryTool';
 export * from './tools/SyntaxCheckerTool';
 export * from './utils/embedding';
 export * from './tools/SystemInfoTool';
+export * from './tools/AnalyzeImageTool';
 export * from './tools/GmailTool';
+export * from './tools/NpmPackageManagerTool';

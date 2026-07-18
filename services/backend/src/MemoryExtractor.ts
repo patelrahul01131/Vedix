@@ -305,6 +305,7 @@ CRITICAL RULES:
 - ATOMIZE FACTS (NO GIANT MEMORIES): Each extracted memory MUST be a single, standalone fact (max 1-2 sentences). NEVER combine unrelated preferences into a single memory.
 - DEDUPLICATION: Cross-reference the EXISTING MEMORIES below. If a fact is already recorded (even with slightly different phrasing), use the "update" action to strengthen it. DO NOT create a duplicate.
 - ANTI-HALLUCINATION: NEVER invent or infer facts. Only extract what is explicitly stated.
+- DEEP CODE CRITIQUE (ANTI-FLAW): Before extracting any SKILL or RULE based on code the agent wrote, you MUST critically analyze it for deep architectural flaws, security vulnerabilities, and race conditions (e.g., read-modify-write flaws in database transactions, missing atomicity). If the agent's code was flawed, extract the CORRECT operational rule to prevent the flaw in the future, rather than blindly memorizing the flawed approach.
 - SESSION SCOPE RULE: NEVER extract the current session's task as a permanent memory. Only extract recurring patterns or explicit permanent declarations.
 - MEANINGFUL REASONS: When providing a "reason" for update, replace, or delete actions, NEVER use generic boilerplate like "Reinforced by explicit user instruction." You MUST describe the specific fact that was modified (e.g., "User confirmed they prefer PostgreSQL over MySQL").
 - CONFIDENCE CALIBRATION for "create" actions:

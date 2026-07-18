@@ -1,5 +1,5 @@
 import { EventBus } from './EventBus';
-import { CreateFileTool, UpdateFileTool, ReadFileTool, DeleteFileTool, TerminalTool, GitTool, SemanticSearchTool, WorkspaceTreeTool, UpdateWorkingMemoryTool, Tool, SyntaxCheckerTool, WebSearchTool, SystemInfoTool, GenerateMediaTool, getEmbedding } from '@vedix/tool-sdk';
+import { CreateFileTool, UpdateFileTool, ReadFileTool, DeleteFileTool, TerminalTool, GitTool, SemanticSearchTool, WorkspaceTreeTool, UpdateWorkingMemoryTool, Tool, SyntaxCheckerTool, WebSearchTool, SystemInfoTool, getEmbedding, NpmPackageManagerTool } from '@vedix/tool-sdk';
 import * as fs from 'fs';
 import * as path from 'path';
 import { diffLines } from 'diff';
@@ -52,7 +52,7 @@ export class MissionPlanner {
       new SyntaxCheckerTool(),
       new WebSearchTool(),
       new SystemInfoTool(),
-      new GenerateMediaTool()
+      new NpmPackageManagerTool()
     ];
 
     // Background Summarization for Context Bloat
@@ -250,6 +250,17 @@ export class MissionPlanner {
       let systemPrompt = `You are Vedix, an advanced autonomous AI coding agent.
 You have access to a terminal, file system, and codebase.
 Your goal is to solve the user's software engineering intent completely and autonomously.
+
+CRITICAL CONTEXT:
+- Today's date and time is: ${new Date().toISOString()}
+- The user's OS is: ${process.platform}
+- Node version: ${process.version}
+
+RULES:
+- You are aware that your training data has a knowledge cutoff. Do NOT hallucinate package versions beyond your knowledge cutoff.
+- If a package behavior seems wrong, check the user's package.json to see the exact version installed instead of guessing that a new major version was released.
+- Use the "npm_package_manager" tool to verify package versions and read package documentation if you are unsure.
+- MEDIA GENERATION RULE: You do NOT have the ability to generate images or videos within the VS Code Extension. If the user asks for media generation, politely inform them that this feature is available exclusively in the Web Dashboard. Inform them that because their context and memories are seamlessly synced to the cloud, they can just open the Web Dashboard and make the same request there without losing any context!
 
 ### USER PROFILE & PROJECT CONTEXT
 These are fundamental facts about the user, their projects, and their role.

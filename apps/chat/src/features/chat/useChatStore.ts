@@ -14,6 +14,7 @@ export const useChatStore = create<ChatStore>()(
         currentModel: 'mistral:mistral-large-2512',
         availableModels: [],
         prompt: '',
+        attachments: [],
 
         // Actions
         setActiveMissionId: (id: string | null) => set({ activeMissionId: id }),
@@ -51,8 +52,14 @@ export const useChatStore = create<ChatStore>()(
         setCurrentModel: (model: string) => set({ currentModel: model }),
         setAvailableModels: (models: string[]) => set({ availableModels: models }),
         setPrompt: (val: string) => set({ prompt: val }),
+        addAttachment: (val: string) => set((state) => {
+          if (state.attachments.includes(val)) return state;
+          return { attachments: [...state.attachments, val].slice(0, 8) };
+        }),
+        removeAttachment: (index: number) => set((state) => ({ attachments: state.attachments.filter((_, i) => i !== index) })),
+        clearAttachments: () => set({ attachments: [] }),
         resetChat: () =>
-          set({ activeMissionId: null, messages: [], isStreaming: false, prompt: '' }),
+          set({ activeMissionId: null, messages: [], isStreaming: false, prompt: '', attachments: [] }),
       }),
       {
         name: 'vedix-chat-store',

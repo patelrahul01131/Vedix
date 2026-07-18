@@ -241,6 +241,16 @@ export class ModelGateway {
         }
       }
 
+      if (
+        errorMessage.includes('ENOTFOUND') ||
+        errorMessage.includes('ECONNREFUSED') ||
+        errorMessage.includes('ETIMEDOUT') ||
+        errorMessage.includes('EHOSTUNREACH') ||
+        errorMessage.includes('fetch failed')
+      ) {
+        throw new Error('Please check your internet connection. Unable to reach the AI provider.');
+      }
+
       throw new Error(`LLM Generation Failed: ${errorMessage}`);
     }
   }

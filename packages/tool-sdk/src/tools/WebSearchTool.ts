@@ -58,6 +58,30 @@ function isSafeUrl(url: string): boolean {
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
+// Region Detection
+// ──────────────────────────────────────────────────────────────────────────────
+
+function getRegionFromTimezone(): string {
+  try {
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    if (!tz) return 'wt-wt';
+    
+    const tzLower = tz.toLowerCase();
+    if (tzLower.includes('kolkata') || tzLower.includes('calcutta')) return 'in-en';
+    if (tzLower.includes('america/')) return 'us-en';
+    if (tzLower.includes('london')) return 'uk-en';
+    if (tzLower.includes('australia/')) return 'au-en';
+    if (tzLower.includes('europe/berlin')) return 'de-de';
+    if (tzLower.includes('europe/paris')) return 'fr-fr';
+    if (tzLower.includes('canada')) return 'ca-en';
+    
+    return 'wt-wt';
+  } catch (e) {
+    return 'wt-wt';
+  }
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
 // WebSearchTool
 // ──────────────────────────────────────────────────────────────────────────────
 
@@ -80,118 +104,156 @@ export class WebSearchTool extends Tool {
       return { success: false, error: 'You must provide a valid "query" argument.' };
     }
 
-    try {
-      const searxngUrl = process.env.SEARXNG_URL || 'https://search.ononoki.org';
-      const searchUrl = `${searxngUrl}/search?q=${encodeURIComponent(args.query)}&format=json`;
+    const searxInstances = [
+      process.env.SEARXNG_URL,
+      'https://search.ononoki.org',
+      'https://searx.tiekoetter.com',
+      'https://searx.be',
+      'https://searx.work'
+    ].filter(Boolean) as string[];
 
-      const response = await fetch(searchUrl, {
-        headers: {
-          'User-Agent':
-            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        },
-      });
+    let results: any[] = [];
+    let searchSuccess = false;
+    let successSource = '';
 
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const data = await response.json();
-
-      if (!data.results || !Array.isArray(data.results)) {
-        return { success: false, error: 'Invalid response format from SearXNG' };
-      }
-
-      const topResults = data.results
-        .slice(0, 10)
-        .filter((r: any) => isSafeUrl(r.url || ''))  // Drop unsafe URLs
-        .map((r: any) => {
-          const rawContent = r.content || r.snippet || '';
-          return {
-            title: sanitizeSnippet(r.title || ''),
-            url: r.url || '',
-            content: sanitizeSnippet(rawContent),
-            domain: r.parsed_url?.[1] || '',
-          };
-        });
-
-      // Fallback domain extraction
-      topResults.forEach((r: any) => {
-        if (!r.domain && r.url) {
-          try {
-            r.domain = new URL(r.url).hostname;
-          } catch (_e) {}
-        }
-      });
-
-      return {
-        success: true,
-        sources: topResults,
-      };
-    } catch (error: any) {
-      // Fallback to DuckDuckGo Lite if SearXNG fails (e.g. 403 Forbidden)
+    // 1. Try multiple SearXNG instances
+    for (const searxUrl of searxInstances) {
       try {
-        const ddgUrl = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(args.query)}`;
-        const ddgRes = await fetch(ddgUrl, {
+        const searchUrl = `${searxUrl}/search?q=${encodeURIComponent(args.query)}&format=json`;
+        console.log(`[WebSearchTool] Attempting SearXNG instance: ${searxUrl}`);
+        const response = await fetch(searchUrl, {
           headers: {
-            'User-Agent':
-              'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
           },
         });
 
-        if (!ddgRes.ok) {
-          return {
-            success: false,
-            error: `SearXNG failed (${error.message}) and DDG fallback failed (${ddgRes.status})`,
-          };
+        if (!response.ok) {
+          console.warn(`[WebSearchTool] SearXNG instance ${searxUrl} failed with status: ${response.status}`);
+          continue;
         }
 
-        const html = await ddgRes.text();
-        const results: any[] = [];
+        const data = await response.json();
+        if (data.results && Array.isArray(data.results) && data.results.length > 0) {
+          console.log(`[WebSearchTool] Success! Extracted ${data.results.length} results from ${searxUrl}`);
+          results = data.results
+            .slice(0, 10)
+            .filter((r: any) => isSafeUrl(r.url || ''))
+            .map((r: any) => ({
+              title: sanitizeSnippet(r.title || ''),
+              url: r.url || '',
+              content: sanitizeSnippet(r.content || r.snippet || ''),
+              domain: r.parsed_url?.[1] || new URL(r.url).hostname,
+            }));
+          searchSuccess = true;
+          successSource = 'searxng';
+          break;
+        } else {
+          console.warn(`[WebSearchTool] SearXNG instance ${searxUrl} returned empty or invalid results structure.`);
+        }
+      } catch (err: any) {
+        console.error(`[WebSearchTool] Error querying SearXNG instance ${searxUrl}:`, err.message || err);
+      }
+    }
 
-        // Improved regex scraping for DDG Lite
-        const resultRegex =
-          /<a [^>]*class="result__a"[^>]*href="([^"]+)"[^>]*>(.*?)<\/a>.*?<a [^>]*class="result__snippet[^>]*>(.*?)<\/a>/gs;
-        let match;
-        let count = 0;
+    // 2. DuckDuckGo Lite Fallback if SearXNG failed
+    if (!searchSuccess) {
+      console.log(`[WebSearchTool] All SearXNG instances failed. Falling back to DDG Lite.`);
+      try {
+        const region = getRegionFromTimezone();
+        const bodyPayload = `q=${encodeURIComponent(args.query)}&kl=${region}`;
 
-        while ((match = resultRegex.exec(html)) !== null && count < 10) {
-          let url = match[1];
-          // Clean DDG redirect URL if present
-          if (url.startsWith('//duckduckgo.com/l/?uddg=')) {
-            url = decodeURIComponent(url.split('uddg=')[1].split('&')[0]);
-          }
+        const ddgRes = await fetch('https://lite.duckduckgo.com/lite/', {
+          method: 'POST',
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Content-Type': 'application/x-www-form-urlencoded'
+          },
+          body: bodyPayload
+        });
 
-          // Skip unsafe URLs
-          if (!isSafeUrl(url)) continue;
+        if (ddgRes.ok) {
+          const html = await ddgRes.text();
+          const htmlRegex = /<a rel="nofollow" href="([^"]+)"[^>]*class='result-link'[^>]*>([\s\S]*?)<\/a>[\s\S]*?<td class='result-snippet'>([\s\S]*?)<\/td>/g;
+          let match;
+          while ((match = htmlRegex.exec(html)) !== null && results.length < 10) {
+            let url = match[1];
+            if (url.includes('duckduckgo.com/y.js')) continue; // Skip sponsored
+            if (url.startsWith('//')) url = 'https:' + url;
+            if (!isSafeUrl(url)) continue;
 
-          const title = match[2].replace(/<[^>]+>/g, '').trim();
-          const snippet = match[3].replace(/<[^>]+>/g, '').trim();
-          let domain = '';
-          try {
-            domain = new URL(url).hostname;
-          } catch (_e) {}
+            const title = match[2].replace(/<[^>]+>/g, '').trim();
+            const snippet = match[3].replace(/<[^>]+>/g, '').trim();
+            let domain = '';
+            try { domain = new URL(url).hostname; } catch (_e) {}
 
-          if (url && title) {
             results.push({
               title: sanitizeSnippet(title),
               url,
               content: sanitizeSnippet(snippet),
               domain,
             });
-            count++;
           }
-        }
 
-        if (results.length > 0) {
-          return { success: true, sources: results };
+          if (results.length > 0) {
+            console.log(`[WebSearchTool] Success! Extracted ${results.length} results from DDG Lite.`);
+            searchSuccess = true;
+            successSource = 'ddglite';
+          } else {
+             console.warn(`[WebSearchTool] DDG Lite returned 0 results or Captcha blocked.`);
+          }
+        } else {
+           console.warn(`[WebSearchTool] DDG Lite failed with status: ${ddgRes.status}`);
         }
-        return { success: false, error: 'No results found via fallback.' };
-      } catch (fallbackError: any) {
-        return {
-          success: false,
-          error: `SearXNG failed: ${error.message}. Fallback also failed: ${fallbackError.message}`,
-        };
+      } catch (err: any) {
+        console.error(`[WebSearchTool] Error querying DDG Lite:`, err.message || err);
       }
     }
+
+    // 3. Wikipedia Fallback if DDG Lite failed
+    if (!searchSuccess) {
+      console.log(`[WebSearchTool] DDG Lite failed. Falling back to Wikipedia API.`);
+      try {
+        const wikiUrl = `https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(args.query)}&utf8=&format=json`;
+        const wikiRes = await fetch(wikiUrl);
+        if (wikiRes.ok) {
+          const wikiData = await wikiRes.json();
+          if (wikiData.query?.search && wikiData.query.search.length > 0) {
+            console.log(`[WebSearchTool] Wikipedia API success. Found ${wikiData.query.search.length} results.`);
+            results = wikiData.query.search.slice(0, 5).map((r: any) => ({
+              title: sanitizeSnippet(r.title),
+              url: `https://en.wikipedia.org/wiki/${encodeURIComponent(r.title)}`,
+              content: sanitizeSnippet(r.snippet.replace(/<[^>]+>/g, '')),
+              domain: 'en.wikipedia.org',
+            }));
+            searchSuccess = true;
+            successSource = 'wikipedia';
+          } else {
+             console.warn(`[WebSearchTool] Wikipedia API returned 0 results for query.`);
+          }
+        } else {
+           console.warn(`[WebSearchTool] Wikipedia API failed with status: ${wikiRes.status}`);
+        }
+      } catch (err: any) {
+        console.error(`[WebSearchTool] Error querying Wikipedia API:`, err.message || err);
+      }
+    }
+    if (searchSuccess && results.length > 0) {
+      if (successSource === 'wikipedia') {
+        // If we hit wikipedia fallback, insert a warning source to instruct the AI
+        results.unshift({
+          title: "SYSTEM WARNING: LIVE SEARCH OFFLINE",
+          url: "https://system.local",
+          content: "Live web search is blocked. These are fallback encyclopedia results. DO NOT retry the web_search tool for this query. Tell the user you cannot fetch real-time live prices right now.",
+          domain: "system.local"
+        });
+      }
+      return { success: true, sources: results };
+    }
+
+    // 3. Absolute Failure
+    return {
+      success: false,
+      error: 'CRITICAL ERROR: Web search returned 0 results from all fallbacks. You MUST tell the user that you cannot fetch live data right now. DO NOT guess or hallucinate the answer. Admit that you do not have the real-time data.'
+    };
   }
 }

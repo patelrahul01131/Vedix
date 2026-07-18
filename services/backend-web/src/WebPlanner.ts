@@ -1,6 +1,6 @@
 import { WebToolRegistry, CanvaConnector } from './WebToolRegistry';
 import { ModelGateway } from '@vedix/model-gateway';
-import { WebSearchTool, GmailTool } from '@vedix/tool-sdk';
+import { WebSearchTool, GmailTool, GenerateMediaTool, AnalyzeImageTool } from '@vedix/tool-sdk';
 import { MemoryQueueService } from './memory/MemoryQueueService';
 import { MemoryRetrievalService } from './memory/MemoryRetrievalService';
 
@@ -29,7 +29,19 @@ export class WebPlanner {
 You are a conversational AI designed to help the user with web search, answering questions, and integrating with 3rd-party apps like Gmail and Canva.
 You MUST NOT attempt to write, edit, or read files from the user's local machine or execute shell commands. 
 Use your available tools (connectors) when the user asks for actions like searching the web, sending an email, or creating a design.
-CRITICAL: When calling tools (like gmail_tool), you MUST provide all required parameters in the JSON payload (to, subject, body). NEVER send an empty object {}.`;
+CRITICAL: When calling tools, you MUST provide all required parameters in the JSON payload. NEVER send an empty object {}.
+IMAGE GENERATION: When using the generate_media tool, you act as an expert Prompt Engineer. You must translate the user's request into a highly detailed, descriptive, and precise visual prompt.
+CRITICAL POP-CULTURE KNOWLEDGE: If the user asks for "donkey on a horse" (or misspellings like "dockey") from the movie "Welcome", they mean Majnu Bhai's famous comedic painting. The prompt MUST describe a funny, cartoonish drawing/painting of a donkey physically standing on the back of a horse. DO NOT generate an actor like Anil Kapoor riding a horse.
+For any pop-culture reference, describe the actual *visual contents* of the scene, not the actor names. Make your prompt highly specific regarding style, composition, and subjects.
+
+IMAGE ROUTING INTELLIGENCE: When a user uploads a reference image, it appears as a markdown link like \`[Reference Image](http...)\`. You MUST apply the following logic:
+1. ANALYSIS: If the user asks a question *about* the image (e.g., "What is this?", "Read the text", "Describe this"), you MUST use the \`analyze_image\` tool to look at it and provide a text response. DO NOT GUESS based on the URL text.
+2. GENERATION/REFERENCE: If the user asks to generate, recreate, or modify an image based on the upload (e.g., "Make this realistic", "Create an image like this"), DO NOT analyze it. Instead, extract the URL and pass it directly to the \`generate_media\` tool as the \`reference_image_url\`.
+3. THIRD-PARTY ACTIONS: If the user asks to email or post the image, pass the URL to the relevant connector tools.
+
+ERROR HANDLING: If any tool returns a \`success: false\` with an \`error\` message (e.g. Insufficient credits, API key missing), you MUST report the EXACT error message to the user so they can understand and fix the underlying problem. Do not paraphrase it as a generic "technical issue".
+
+CRITICAL DATA ACCURACY: When asked for live data like stock prices, gold prices, or exchange rates, you MUST ONLY use the exact numbers provided in the web_search snippets. If the search snippets only contain links or descriptions but NOT the actual numeric price, you MUST NOT guess, calculate, or hallucinate a number. You must explicitly tell the user: "The live price isn't visible in the search summary, but you can find it here:" and provide the links.`;
 
     // 1. Feature flag for new memory architecture (Activated!)
     const USE_NEW_MEMORY = true;
@@ -42,7 +54,7 @@ CRITICAL: When calling tools (like gmail_tool), you MUST provide all required pa
     this.gateway = new ModelGateway(modelName || 'mistral-large-latest');
 
     // Filter tools
-    const activeTools: any[] = [new WebSearchTool()];
+    const activeTools: any[] = [new WebSearchTool(), new GenerateMediaTool(), new AnalyzeImageTool()];
     if (enabledConnectors?.gmail && userId) {
       activeTools.push(new GmailTool(userId));
     }
@@ -74,7 +86,10 @@ CRITICAL: When calling tools (like gmail_tool), you MUST provide all required pa
         onToolCall: async (toolName, args) => {
           console.log(`[WebPlanner] LLM executing tool: ${toolName}`, args);
           
-          if (onActivity) {
+          // Mistral sometimes makes parallel empty tool calls {}. We suppress these from the UI.
+          const isBrokenCall = toolName === 'web_search' && (!args || !args.query || (typeof args.query === 'string' && args.query.trim() === ''));
+
+          if (onActivity && !isBrokenCall) {
             onActivity({
               id: Date.now().toString(),
               type: 'tool',
@@ -88,13 +103,31 @@ CRITICAL: When calling tools (like gmail_tool), you MUST provide all required pa
           if (tool) {
             try {
               const result = await tool.execute(args);
-              if (onActivity) {
-                onActivity({
-                  id: Date.now().toString(),
-                  type: 'tool',
-                  title: `Completed ${toolName}`,
-                  status: 'done'
-                });
+              if (result && result.success === false) {
+                if (onActivity && !isBrokenCall) {
+                  onActivity({
+                    id: Date.now().toString(),
+                    type: 'tool',
+                    title: `Failed ${toolName}`,
+                    status: 'error',
+                    details: result.error || 'Execution failed'
+                  });
+                }
+              } else {
+                if (onActivity && !isBrokenCall) {
+                  let detailsStr = undefined;
+                  if (toolName === 'web_search' && result.sources && Array.isArray(result.sources)) {
+                    detailsStr = JSON.stringify({ sources: result.sources });
+                  }
+
+                  onActivity({
+                    id: Date.now().toString(),
+                    type: 'tool',
+                    title: `Completed ${toolName}`,
+                    status: 'done',
+                    details: detailsStr
+                  });
+                }
               }
               return result;
             } catch (err: any) {

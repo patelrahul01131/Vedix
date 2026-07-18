@@ -1,6 +1,7 @@
 import { FastifyInstance } from 'fastify';
 import { PrismaClient } from '@vedix/database';
 import { WebPlanner } from '../WebPlanner';
+import { S3Client, PutObjectCommand, DeleteObjectsCommand } from '@aws-sdk/client-s3';
 
 const prisma = new PrismaClient();
 const planner = new WebPlanner();
@@ -75,6 +76,48 @@ export default async function chatRoutes(fastify: FastifyInstance) {
   fastify.delete('/chat/history/:missionId', async (request, reply) => {
     const { missionId } = request.params as { missionId: string };
     try {
+      const messages = await prisma.webMessage.findMany({ where: { missionId } });
+      const minioKeys: string[] = [];
+      const bucketName = process.env.MINIO_BUCKET || 'vedix-media';
+      const endpoint = process.env.MINIO_ENDPOINT || 'http://localhost:9000';
+      const minioPrefix = `${endpoint}/${bucketName}/`;
+
+      for (const msg of messages) {
+        if (typeof msg.content === 'string') {
+          const regex = new RegExp(`${minioPrefix}([^\\s\\)\\]]+)`, 'g');
+          let match;
+          while ((match = regex.exec(msg.content)) !== null) {
+            minioKeys.push(match[1]);
+          }
+        } else if (msg.content) {
+            const strContent = JSON.stringify(msg.content);
+            const regex = new RegExp(`${minioPrefix}([^\\s\\)\\]\\"]+)`, 'g');
+            let match;
+            while ((match = regex.exec(strContent)) !== null) {
+                minioKeys.push(match[1]);
+            }
+        }
+      }
+
+      if (minioKeys.length > 0) {
+        const s3Client = new S3Client({
+          region: 'us-east-1',
+          endpoint,
+          credentials: {
+            accessKeyId: process.env.MINIO_ACCESS_KEY || 'minioadmin',
+            secretAccessKey: process.env.MINIO_SECRET_KEY || 'minioadmin',
+          },
+          forcePathStyle: true
+        });
+        
+        await s3Client.send(new DeleteObjectsCommand({
+          Bucket: bucketName,
+          Delete: {
+            Objects: minioKeys.map(key => ({ Key: key }))
+          }
+        })).catch((err: any) => fastify.log.error('MinIO cleanup failed:', err));
+      }
+
       await prisma.webMission.delete({
         where: { id: missionId }
       });
@@ -152,8 +195,60 @@ export default async function chatRoutes(fastify: FastifyInstance) {
   });
 
   fastify.post('/chat/message', async (request, reply) => {
-    const { message, missionId, modelName } = request.body as { message: string, missionId?: string, modelName?: string };
+    const { message, missionId, modelName, attachmentsBase64 } = request.body as { message: string, missionId?: string, modelName?: string, attachmentsBase64?: string[] };
     
+    let finalMessage = message;
+
+    if (attachmentsBase64 && attachmentsBase64.length > 0) {
+      for (const base64Str of attachmentsBase64) {
+        if (base64Str.startsWith('http://') || base64Str.startsWith('https://')) {
+          // Handle cross-tab dragged URLs directly without uploading to MinIO
+          finalMessage += `\n\n[Reference Image](${base64Str})`;
+        } else {
+        try {
+          const s3Client = new S3Client({
+            region: 'us-east-1',
+            endpoint: process.env.MINIO_ENDPOINT || 'http://localhost:9000',
+            credentials: {
+              accessKeyId: process.env.MINIO_ACCESS_KEY || 'minioadmin',
+              secretAccessKey: process.env.MINIO_SECRET_KEY || 'minioadmin',
+            },
+            forcePathStyle: true
+          });
+          const bucketName = process.env.MINIO_BUCKET || 'vedix-media';
+          
+          const base64Data = base64Str.replace(/^data:[\w-]+\/[\w\-\.\+]+;base64,/, '');
+          const mimeMatch = base64Str.match(/^data:([\w-]+\/[\w\-\.\+]+);base64,/);
+          const contentType = mimeMatch ? mimeMatch[1] : 'application/octet-stream';
+          const buffer = Buffer.from(base64Data, 'base64');
+          
+          let ext = 'bin';
+          if (contentType.startsWith('image/')) ext = contentType.split('/')[1];
+          else if (contentType === 'application/pdf') ext = 'pdf';
+          else if (contentType.includes('word')) ext = 'docx';
+          else if (contentType.includes('presentation')) ext = 'pptx';
+          else if (contentType.includes('text/')) ext = 'txt';
+
+          const filename = `uploads/ref_${Date.now()}_${Math.floor(Math.random()*1000)}.${ext}`;
+
+          await s3Client.send(new PutObjectCommand({
+            Bucket: bucketName,
+            Key: filename,
+            Body: buffer,
+            ContentType: contentType
+          }));
+
+          const minioUrl = `${process.env.MINIO_ENDPOINT || 'http://localhost:9000'}/${bucketName}/${filename}`;
+          const isImage = contentType.startsWith('image/');
+          const prefixText = isImage ? `![Reference Image]` : `[Attachment - ${ext.toUpperCase()}]`;
+          finalMessage += `\n\n${prefixText}(${minioUrl})`;
+        } catch (err: any) {
+          fastify.log.error('Failed to upload attachment:', err.message);
+        }
+      }
+      }
+    }
+
     // Save user message to database
     // We assume missionId is provided or we create a default one
     let currentMissionId = missionId;
@@ -167,7 +262,7 @@ export default async function chatRoutes(fastify: FastifyInstance) {
     await prisma.webMessage.create({
       data: {
         role: 'user',
-        content: message,
+        content: finalMessage,
         missionId: currentMissionId
       }
     });
@@ -179,7 +274,27 @@ export default async function chatRoutes(fastify: FastifyInstance) {
     });
 
     const aiMessages = dbMessages
-      .filter(msg => msg.content && msg.content.trim().length > 0)
+      .filter(msg => {
+        if (!msg.content || msg.content.trim().length === 0) return false;
+        if (msg.role === 'tool') return false; // Drop tool results from history
+
+        let parsedContent: any = msg.content;
+        if (typeof msg.content === 'string' && (msg.content.startsWith('[') || msg.content.startsWith('{'))) {
+          try {
+            parsedContent = JSON.parse(msg.content);
+          } catch (e) {
+            // keep as string
+          }
+        }
+
+        if ((msg.role === 'agent' || msg.role === 'assistant') && Array.isArray(parsedContent)) {
+          // If the assistant message only has tool-calls (no text), drop it from history
+          const hasText = parsedContent.some((p: any) => p.type === 'text' && p.text && p.text.trim().length > 0);
+          if (!hasText) return false;
+        }
+
+        return true;
+      })
       .map(msg => {
         let parsedContent: any = msg.content;
         if (typeof msg.content === 'string' && (msg.content.startsWith('[') || msg.content.startsWith('{'))) {
@@ -189,8 +304,14 @@ export default async function chatRoutes(fastify: FastifyInstance) {
             // keep as string
           }
         }
+
+        if ((msg.role === 'agent' || msg.role === 'assistant') && Array.isArray(parsedContent)) {
+          // Strip tool-calls from history, leaving only the text conversation
+          parsedContent = parsedContent.filter((p: any) => p.type === 'text');
+        }
+
         return {
-          role: msg.role === 'agent' || msg.role === 'assistant' ? 'assistant' : msg.role as 'user' | 'assistant' | 'system' | 'tool',
+          role: msg.role === 'agent' || msg.role === 'assistant' ? 'assistant' : msg.role as 'user' | 'assistant' | 'system',
           content: parsedContent
         };
       });
@@ -229,12 +350,14 @@ export default async function chatRoutes(fastify: FastifyInstance) {
       );
       
       // Save all generated messages (assistant + tool calls/results) to DB
-      for (const msg of generatedMessages) {
+      for (let i = 0; i < generatedMessages.length; i++) {
+        const msg = generatedMessages[i];
         await prisma.webMessage.create({
           data: {
             role: msg.role === 'assistant' ? 'assistant' : msg.role,
             content: typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content),
-            missionId: currentMissionId
+            missionId: currentMissionId,
+            createdAt: new Date(Date.now() + i)
           }
         });
       }
