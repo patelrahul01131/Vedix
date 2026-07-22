@@ -69,7 +69,7 @@ export default function Users() {
             {users.map(u => (
               <tr 
                 key={u.id} 
-                onClick={() => navigate(`/users/${u.id}`)}
+                onClick={() => navigate(`/admin/users/${u.id}`)}
                 style={{ cursor: 'pointer' }}
               >
                 <td>

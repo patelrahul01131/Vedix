@@ -54,12 +54,20 @@ export const TokenEconomics = () => {
                 </tr>
               </thead>
               <tbody>
-                {modelStats.map((stat, idx) => (
-                  <tr key={idx}>
-                    <td>{stat.modelName || 'Unknown'}</td>
-                    <td>{(stat?._sum?.totalTokens || 0).toLocaleString()}</td>
+                {modelStats.length === 0 ? (
+                  <tr>
+                    <td colSpan={2} style={{ textAlign: 'center', padding: '24px', color: 'var(--text-secondary)' }}>
+                      No token usage data available yet. Waiting for LLM calls...
+                    </td>
                   </tr>
-                ))}
+                ) : (
+                  modelStats.map((stat, idx) => (
+                    <tr key={idx}>
+                      <td>{stat.model || 'Unknown'}</td>
+                      <td>{(stat.total || 0).toLocaleString()}</td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>
@@ -75,12 +83,20 @@ export const TokenEconomics = () => {
                 </tr>
               </thead>
               <tbody>
-                {serviceStats.map((stat, idx) => (
-                  <tr key={idx}>
-                    <td>{stat.service || 'Unknown'}</td>
-                    <td>{(stat?._sum?.totalTokens || 0).toLocaleString()}</td>
+                {serviceStats.length === 0 ? (
+                  <tr>
+                    <td colSpan={2} style={{ textAlign: 'center', padding: '24px', color: 'var(--text-secondary)' }}>
+                      No service usage data available yet. Waiting for LLM calls...
+                    </td>
                   </tr>
-                ))}
+                ) : (
+                  serviceStats.map((stat, idx) => (
+                    <tr key={idx}>
+                      <td>{stat.service || 'Unknown'}</td>
+                      <td>{(stat.total || 0).toLocaleString()}</td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>

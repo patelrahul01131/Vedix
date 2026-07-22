@@ -334,7 +334,7 @@ server.register(async function (fastify) {
       }
       // Auto-decline any pending approval to prevent leaked promises
       // when a user disconnects while the agent is waiting for permission.
-      planner.resolveApproval(false);
+      planner.clearApprovals();
       eventBus.off('status', onAgentStatus);
       eventBus.off('message', onAgentMessage);
       eventBus.off('debugData', onDebugData);

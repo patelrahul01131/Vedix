@@ -10,6 +10,7 @@ interface Memory {
   content: string;
   confidence: number;
   status: string;
+  isGlobal: boolean;
   createdAt: string;
   user: {
     email: string;
@@ -107,6 +108,7 @@ export default function AgentKnowledge() {
           <thead>
             <tr>
               <th>User Email</th>
+              <th>Scope</th>
               <th>Type</th>
               <th>Extracted Lesson</th>
               <th>Confidence</th>
@@ -118,7 +120,14 @@ export default function AgentKnowledge() {
           <tbody>
             {filteredMemories.map(m => (
               <tr key={m.id}>
-                <td style={{ fontWeight: 500 }}>{m.user.email}</td>
+                <td style={{ fontWeight: 500 }}>{m.user?.email || 'System'}</td>
+                <td>
+                  {m.isGlobal ? (
+                    <span className="badge badge-primary" style={{ background: 'var(--accent-color)', color: '#fff' }}>Global</span>
+                  ) : (
+                    <span className="badge" style={{ background: 'rgba(255,255,255,0.1)', color: 'var(--text-secondary)' }}>User Only</span>
+                  )}
+                </td>
                 <td>
                   <span className={m.type === 'SKILL' ? 'badge badge-success' : m.type === 'ERROR' ? 'badge badge-danger' : 'badge badge-warning'}>
                     {m.type}

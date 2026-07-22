@@ -78,9 +78,12 @@ export const QueueDashboard = () => {
           ))}
           {jobs.length === 0 && (
             <tr>
-              <td colSpan={4} style={{ textAlign: 'center' }}>No recent jobs</td>
+              <td colSpan={4} style={{ textAlign: 'center', padding: '32px', color: 'var(--text-secondary)' }}>
+                <div>No recent memory extraction jobs.</div>
+                <div style={{ fontSize: '0.85rem', marginTop: '8px' }}>The background queue is live and waiting for agents to complete missions.</div>
+              </td>
             </tr>
-            )}
+          )}
           </tbody>
         </table>
       </div>

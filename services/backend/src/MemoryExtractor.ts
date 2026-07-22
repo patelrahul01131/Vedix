@@ -2,6 +2,7 @@ import { ModelGateway } from '@vedix/model-gateway';
 import { db } from '@vedix/database';
 import { logger } from './logger';
 import { TokenTracker } from './TokenTracker';
+import { RedisCache } from './queue/RedisCache';
 
 // ──────────────────────────────────────────────────────────────────────────────
 // Smart Extraction Decision System
@@ -42,7 +43,7 @@ Your job is to scan a conversation and decide:
 2. If yes, what SPECIFIC categories exist?
 
 Memory categories:
-- SKILL: A uniquely defined, user-specific technical workflow, deployment step, or custom code pattern. DO NOT extract generic programming knowledge (e.g., standard algorithms, basic API usage, or one-off scripts).
+- SKILL: A reusable technical workflow, codebase architectural fact, or framework quirk discovered during the session (e.g., specific build tool configs, CORS requirements, ESM vs CJS rules). DO NOT extract generic programming knowledge.
 - ERROR: The agent made a mistake and then corrected it, or a bug was diagnosed and fixed.
 - PREFERENCE: The user stated or revealed a preference for a tool, language, framework, or style.
 - RULE: The user stated a hard constraint, safety rule, or operational policy.
@@ -50,10 +51,10 @@ Memory categories:
 - PROFILE: A permanent user fact was revealed (name, project name, role, company).
 
 STRICT RULES:
-- Return { shouldExtract: false } for: greetings, chitchat, single questions with no personal context, status checks ("is X working?"), ephemeral debugging sessions with no permanent learning.
+- Return { shouldExtract: false } for: greetings, chitchat, single questions with no personal context, status checks.
+- NEVER extract task-specific instructions (e.g., "run npm audit", "update deprecated packages") as permanent SKILLs. These are temporary and must NOT be saved.
+- EXCEPTION: If the agent solved a complex framework error (e.g., CORS, Vite config, Tailwind syntax changes), YOU MUST RETURN { shouldExtract: true } and classify it as a SKILL or RULE so the agent learns the codebase quirk permanently!
 - Only include a category if you are CONFIDENT the conversation has extractable facts for it.
-- Never include SKILL for a one-off task. Only for a pattern worth repeating.
-- PREFERENCE requires the user to have explicitly stated a choice, not just used something once.
 
 Return ONLY valid JSON:
 { "shouldExtract": true|false, "categories": ["SKILL", "PREFERENCE"], "reason": "<one sentence>" }
@@ -307,15 +308,16 @@ CRITICAL RULES:
 - ANTI-HALLUCINATION: NEVER invent or infer facts. Only extract what is explicitly stated.
 - DEEP CODE CRITIQUE (ANTI-FLAW): Before extracting any SKILL or RULE based on code the agent wrote, you MUST critically analyze it for deep architectural flaws, security vulnerabilities, and race conditions (e.g., read-modify-write flaws in database transactions, missing atomicity). If the agent's code was flawed, extract the CORRECT operational rule to prevent the flaw in the future, rather than blindly memorizing the flawed approach.
 - SESSION SCOPE RULE: NEVER extract the current session's task as a permanent memory. Only extract recurring patterns or explicit permanent declarations.
+- TEMPORARY TASK RULE: NEVER extract temporary debugging steps, dependency updates (e.g., npm audit, resolving deprecations), or project-specific fixes as permanent memories. Only extract true, cross-project user preferences or reusable skills.
 - MEANINGFUL REASONS: When providing a "reason" for update, replace, or delete actions, NEVER use generic boilerplate like "Reinforced by explicit user instruction." You MUST describe the specific fact that was modified (e.g., "User confirmed they prefer PostgreSQL over MySQL").
 - CONFIDENCE CALIBRATION for "create" actions:
   - 100: Explicit, permanent user declarations (e.g., "I switched permanently to Cursor").
-  - 80: Direct preferences, rules, or safety constraints.
-  - 50: Standard technical skills or workflows.
-  - 30: Inferred or one-off behaviors needing reinforcement.
+  - 80: Explicit user rules or safety constraints.
+  - 30: Standard technical skills, inferred behaviors, or workflows (DEFAULT for all create actions unless explicitly permanent).
+- GLOBAL LEARNING FLAG (isGlobal): If the extracted SKILL or RULE is a universal framework fact (like CORS config, Node ESM rules) that applies to ALL users, you MUST add "isGlobal": true to the JSON. DO NOT set isGlobal: true for hacky workarounds (e.g., dynamic imports to bypass CJS/ESM errors) or specific testing tactics (e.g., simulating CORS manually). Global rules must be FUNDAMENTAL, universally correct framework architectures. If it contains private file paths, API keys, or user business logic, omit it or set it to false.
 
 Format your response as a valid JSON array:
-- NEW: { "action": "create", "type": "<CATEGORY>", "content": "<lesson>", "initial_confidence": <number> }
+- NEW: { "action": "create", "type": "<CATEGORY>", "content": "<lesson>", "initial_confidence": <number>, "isGlobal": true|false }
 - REINFORCE: { "action": "update", "id": "<memory_id>", "content": "<updated_content>", "reason": "<brief_reason>" }
 - CONTRADICT: { "action": "replace", "id": "<old_memory_id>", "type": "<CATEGORY>", "content": "<new_truth>", "reason": "<brief_reason>" }
 - DELETE: { "action": "delete", "id": "<memory_id>", "reason": "<brief_reason>" }
@@ -457,7 +459,7 @@ ${fullTranscript}`;
               logger.warn(`Failed to generate embedding for new memory: ${embedErr}`);
             }
 
-            let initialConfidence = 50;
+            let initialConfidence = 30;
             if (
               typeof item.initial_confidence === 'number' &&
               item.initial_confidence >= 10 &&
@@ -475,7 +477,7 @@ ${fullTranscript}`;
                   SELECT id, type, content, confidence,
                          1 - ("embeddingVector" <=> ${vectorString}::vector) as similarity
                   FROM "AgentMemory"
-                  WHERE "userId" = ${userId}
+                  WHERE ("userId" = ${userId} OR "isGlobal" = true)
                     AND "embeddingVector" IS NOT NULL
                   ORDER BY "embeddingVector" <=> ${vectorString}::vector
                   LIMIT 1;
@@ -519,6 +521,7 @@ ${fullTranscript}`;
             const newMem = await (db as any).agentMemory.create({
               data: {
                 userId,
+                isGlobal: !!item.isGlobal,
                 type: item.type,
                 content: contentStr,
                 status: 'PENDING',
@@ -542,6 +545,10 @@ ${fullTranscript}`;
                 );
             }
           }
+        }
+
+        if (extracted.length > 0) {
+          await RedisCache.invalidateUserMemory(userId);
         }
 
         logger.info(

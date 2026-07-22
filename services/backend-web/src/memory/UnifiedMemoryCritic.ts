@@ -1,5 +1,6 @@
 import { db } from '@vedix/database';
 import { getSemanticMemoryTable } from './LanceDB';
+import { RedisCache } from './RedisCache';
 
 export class UnifiedMemoryCritic {
   
@@ -46,6 +47,9 @@ export class UnifiedMemoryCritic {
         // If the 'confidence' metadata isn't set up perfectly yet in LanceDB schema
         console.warn(`[UnifiedMemoryCritic] Could not prune LanceDB (might need confidence field initialized):`, lanceErr);
       }
+      
+      // 4. Invalidate global memory cache
+      await RedisCache.invalidateAllMemory();
 
       console.log('[UnifiedMemoryCritic] Memory pruning complete.');
       return true;

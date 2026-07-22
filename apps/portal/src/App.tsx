@@ -13,6 +13,7 @@ import AdminDashboard from './pages/admin/AdminDashboard';
 import Users from './pages/admin/Users';
 import UserDetails from './pages/admin/UserDetails';
 import Agents from './pages/admin/Agents';
+import MissionDetails from './pages/admin/MissionDetails';
 import AgentKnowledge from './pages/admin/AgentKnowledge';
 import Tools from './pages/admin/Tools';
 import { QueueDashboard } from './pages/admin/QueueDashboard';
@@ -42,6 +43,7 @@ function App() {
           <Route path="users" element={<Users />} />
           <Route path="users/:id" element={<UserDetails />} />
           <Route path="agents" element={<Agents />} />
+          <Route path="missions/:id" element={<MissionDetails />} />
           <Route path="agent-knowledge" element={<AgentKnowledge />} />
           <Route path="tools" element={<Tools />} />
           <Route path="queue" element={<QueueDashboard />} />

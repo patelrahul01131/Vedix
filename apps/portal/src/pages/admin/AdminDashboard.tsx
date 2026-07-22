@@ -69,16 +69,42 @@ export default function AdminDashboard() {
         <div className="glass-panel">
           <h3 style={{ margin: '0 0 24px 0', fontSize: '1.25rem' }}>Platform Activity (Weekly)</h3>
           <div style={{ display: 'flex', alignItems: 'flex-end', gap: '12px', height: '200px', paddingBottom: '16px', borderBottom: '1px solid var(--border-color)' }}>
-            {stats.missionActivity.map((val, i) => (
-              <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
-                <div style={{ 
-                  width: '100%', 
-                  height: `${(val / maxMissions) * 180}px`, 
-                  background: i === 6 ? 'var(--accent-color)' : 'rgba(56, 189, 248, 0.2)',
-                  borderRadius: '4px 4px 0 0',
-                  transition: 'height 1s ease-out'
-                }} />
-                <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Day {i + 1}</span>
+            {stats.missionActivity.map((val: any, i) => (
+              <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', position: 'relative' }} className="chart-bar-container">
+                {/* Tooltip on hover */}
+                <div className="chart-tooltip" style={{
+                  display: 'none', position: 'absolute', bottom: '100%', left: '50%', transform: 'translateX(-50%)',
+                  background: 'var(--card-bg)', padding: '8px', borderRadius: '4px', border: '1px solid rgba(255,255,255,0.1)',
+                  fontSize: '0.75rem', zIndex: 10, whiteSpace: 'nowrap', marginBottom: '8px', boxShadow: '0 4px 12px rgba(0,0,0,0.5)'
+                }}>
+                  <div style={{ fontWeight: 'bold', marginBottom: '4px' }}>{val.date}</div>
+                  <div>Web Agent: {val.web}</div>
+                  <div>Extension: {val.extension}</div>
+                  <div style={{ color: 'var(--accent-color)', fontWeight: 'bold', marginTop: '4px' }}>Total: {val.total}</div>
+                </div>
+
+                <div 
+                  className="chart-bar"
+                  style={{ 
+                    width: '100%', 
+                    height: `${((val.total || 0) / maxMissions) * 180}px`, 
+                    background: i === 6 ? 'var(--accent-color)' : 'rgba(56, 189, 248, 0.2)',
+                    borderRadius: '4px 4px 0 0',
+                    transition: 'height 1s ease-out',
+                    cursor: 'pointer'
+                  }} 
+                  onMouseEnter={(e) => {
+                    const tooltip = e.currentTarget.previousElementSibling as HTMLElement;
+                    if (tooltip) tooltip.style.display = 'block';
+                  }}
+                  onMouseLeave={(e) => {
+                    const tooltip = e.currentTarget.previousElementSibling as HTMLElement;
+                    if (tooltip) tooltip.style.display = 'none';
+                  }}
+                />
+                <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                  {new Date(val.date).toLocaleDateString(undefined, { weekday: 'short' })}
+                </span>
               </div>
             ))}
           </div>
@@ -87,16 +113,38 @@ export default function AdminDashboard() {
         <div className="glass-panel">
           <h3 style={{ margin: '0 0 24px 0', fontSize: '1.25rem' }}>Cumulative Knowledge Growth</h3>
           <div style={{ display: 'flex', alignItems: 'flex-end', gap: '12px', height: '200px', paddingBottom: '16px', borderBottom: '1px solid var(--border-color)' }}>
-            {stats.memoryGrowth.map((val, i) => (
-              <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
-                <div style={{ 
-                  width: '100%', 
-                  height: `${(val / maxMemory) * 180}px`, 
-                  background: 'linear-gradient(to top, rgba(34, 197, 94, 0.2), rgba(34, 197, 94, 0.8))',
-                  borderRadius: '4px 4px 0 0',
-                  transition: 'height 1s ease-out'
-                }} />
-                <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Day {i + 1}</span>
+            {stats.memoryGrowth.map((val: any, i) => (
+              <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', position: 'relative' }}>
+                <div className="chart-tooltip" style={{
+                  display: 'none', position: 'absolute', bottom: '100%', left: '50%', transform: 'translateX(-50%)',
+                  background: 'var(--card-bg)', padding: '8px', borderRadius: '4px', border: '1px solid rgba(255,255,255,0.1)',
+                  fontSize: '0.75rem', zIndex: 10, whiteSpace: 'nowrap', marginBottom: '8px', boxShadow: '0 4px 12px rgba(0,0,0,0.5)'
+                }}>
+                  <div style={{ fontWeight: 'bold', marginBottom: '4px' }}>{val.date}</div>
+                  <div style={{ color: 'var(--success-color)', fontWeight: 'bold' }}>Total Memories: {val.count}</div>
+                </div>
+
+                <div 
+                  style={{ 
+                    width: '100%', 
+                    height: `${((val.count || 0) / maxMemory) * 180}px`, 
+                    background: 'linear-gradient(to top, rgba(34, 197, 94, 0.2), rgba(34, 197, 94, 0.8))',
+                    borderRadius: '4px 4px 0 0',
+                    transition: 'height 1s ease-out',
+                    cursor: 'pointer'
+                  }} 
+                  onMouseEnter={(e) => {
+                    const tooltip = e.currentTarget.previousElementSibling as HTMLElement;
+                    if (tooltip) tooltip.style.display = 'block';
+                  }}
+                  onMouseLeave={(e) => {
+                    const tooltip = e.currentTarget.previousElementSibling as HTMLElement;
+                    if (tooltip) tooltip.style.display = 'none';
+                  }}
+                />
+                <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                  {new Date(val.date).toLocaleDateString(undefined, { weekday: 'short' })}
+                </span>
               </div>
             ))}
           </div>

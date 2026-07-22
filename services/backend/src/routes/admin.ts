@@ -38,7 +38,7 @@ export default async function adminRoutes(fastify: FastifyInstance) {
           email: true,
           role: true,
           createdAt: true,
-          missions: { orderBy: { updatedAt: 'desc' } },
+          webMissions: { orderBy: { updatedAt: 'desc' } },
           apiKeys: true,
           agentMemories: { orderBy: { createdAt: 'desc' } }
         }
@@ -62,6 +62,59 @@ export default async function adminRoutes(fastify: FastifyInstance) {
     }
   });
 
+  fastify.get('/users/:id/analytics', async (request, reply) => {
+    try {
+      const { id } = request.params as { id: string };
+      
+      const missions = await db.webMission.findMany({
+        where: { userId: id },
+        select: { id: true, createdAt: true, status: true, _count: { select: { messages: true } } }
+      });
+
+      const tokenStats = await db.tokenLog.aggregate({
+        where: { missionId: { in: missions.map(m => m.id) } },
+        _sum: { totalTokens: true, promptTokens: true, completionTokens: true }
+      });
+
+      return reply.send({ analytics: { missions, tokenStats } });
+    } catch (error) {
+      return reply.code(500).send({ error: 'Failed to fetch user analytics' });
+    }
+  });
+
+  fastify.get('/missions/:id/chat', async (request, reply) => {
+    try {
+      const { id } = request.params as { id: string };
+      const mission = await db.webMission.findUnique({
+        where: { id },
+        include: { user: { select: { email: true } } }
+      });
+      if (!mission) return reply.code(404).send({ error: 'Mission not found' });
+
+      // Get messages and join token logs where applicable
+      const messages = await db.webMessage.findMany({
+        where: { missionId: id },
+        orderBy: { createdAt: 'asc' }
+      });
+      
+      const tokenLogs = await db.tokenLog.findMany({
+        where: { missionId: id }
+      });
+      
+      const messagesWithTokens = messages.map(m => {
+        const tokenLog = tokenLogs.find(t => t.messageId === m.id);
+        return {
+          ...m,
+          tokens: tokenLog ? { prompt: tokenLog.promptTokens, completion: tokenLog.completionTokens, total: tokenLog.totalTokens } : null
+        };
+      });
+
+      return reply.send({ mission, messages: messagesWithTokens });
+    } catch (error) {
+      return reply.code(500).send({ error: 'Failed to fetch mission chat' });
+    }
+  });
+
   fastify.get('/stats', async (request, reply) => {
     try {
       const totalUsers = await db.user.count();
@@ -75,6 +128,14 @@ export default async function adminRoutes(fastify: FastifyInstance) {
       const sevenDaysAgo = new Date();
       sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
       
+      const webMissionsByDay = await db.$queryRaw`
+        SELECT DATE_TRUNC('day', "createdAt") as date, COUNT(*)::int as count
+        FROM "WebMission"
+        WHERE "createdAt" >= ${sevenDaysAgo}
+        GROUP BY DATE_TRUNC('day', "createdAt")
+        ORDER BY date ASC;
+      ` as any[];
+
       const missionsByDay = await db.$queryRaw`
         SELECT DATE_TRUNC('day', "createdAt") as date, COUNT(*)::int as count
         FROM "Mission"
@@ -91,8 +152,8 @@ export default async function adminRoutes(fastify: FastifyInstance) {
         ORDER BY date ASC;
       ` as any[];
 
-      const missionActivity = new Array(7).fill(0);
-      const memoryGrowth = new Array(7).fill(0);
+      const missionActivity = [];
+      const memoryGrowth = [];
       
       const now = new Date();
       let cumulativeMemories = 0;
@@ -102,11 +163,21 @@ export default async function adminRoutes(fastify: FastifyInstance) {
         const dayString = d.toISOString().split('T')[0];
         
         const mCount = missionsByDay.find(r => new Date(r.date).toISOString().split('T')[0] === dayString)?.count || 0;
-        missionActivity[6 - i] = mCount;
+        const webCount = webMissionsByDay.find(r => new Date(r.date).toISOString().split('T')[0] === dayString)?.count || 0;
+        
+        missionActivity.push({
+          date: dayString,
+          extension: mCount,
+          web: webCount,
+          total: mCount + webCount
+        });
         
         const memCount = memoriesByDay.find(r => new Date(r.date).toISOString().split('T')[0] === dayString)?.count || 0;
         cumulativeMemories += memCount;
-        memoryGrowth[6 - i] = cumulativeMemories;
+        memoryGrowth.push({
+          date: dayString,
+          count: cumulativeMemories
+        });
       }
       
       return reply.send({
@@ -157,6 +228,7 @@ export default async function adminRoutes(fastify: FastifyInstance) {
         content: pref.rule, // Maps rule to content
         confidence: pref.confidence,
         status: pref.isActive ? 'APPROVED' : 'PENDING',
+        isGlobal: false,
         createdAt: pref.createdAt,
         user: pref.user
       }));

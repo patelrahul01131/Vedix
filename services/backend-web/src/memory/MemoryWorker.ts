@@ -1,6 +1,7 @@
 import { db } from '@vedix/database';
 import { ModelGateway } from '@vedix/model-gateway';
 import { getSemanticMemoryTable } from './LanceDB';
+import { RedisCache } from './RedisCache';
 
 const POLLING_INTERVAL_MS = 5000;
 const EXTRACTION_MODEL = 'mistral-small-latest'; // Cheaper model for background processing
@@ -125,16 +126,33 @@ Example JSON:
         for (const action of parsed.actions) {
           try {
             if (action.action === 'ADD') {
-              await (db as any).userExplicitPreference.create({
-                data: {
-                  userId: item.userId,
-                  category: action.category || 'PREFERENCE',
-                  rule: action.rule,
-                  source: item.source,
-                  confidence: Math.min(100, Math.max(1, action.confidence || 50)),
-                  isActive: true
-                }
-              });
+              // ── Algorithmic Dedup Guard ──
+              // Prevent LLM from hallucinating an ADD when it should have UPDATEd an existing rule
+              const duplicate = existingPrefs.find((p: any) => 
+                p.category === (action.category || 'PREFERENCE') && 
+                (p.rule.toLowerCase().includes(action.rule.toLowerCase()) || 
+                 action.rule.toLowerCase().includes(p.rule.toLowerCase()))
+              );
+
+              if (duplicate) {
+                console.log(`[Algorithmic Dedup] Caught duplicate explicit rule. Upgrading existing memory ${duplicate.id} instead of adding new.`);
+                const newConfidence = Math.min(100, duplicate.confidence + (action.confidence || 10));
+                await (db as any).userExplicitPreference.update({
+                  where: { id: duplicate.id },
+                  data: { confidence: newConfidence }
+                });
+              } else {
+                await (db as any).userExplicitPreference.create({
+                  data: {
+                    userId: item.userId,
+                    category: action.category || 'PREFERENCE',
+                    rule: action.rule,
+                    source: item.source,
+                    confidence: Math.min(100, Math.max(1, action.confidence || 50)),
+                    isActive: true
+                  }
+                });
+              }
             } else if (action.action === 'UPDATE' && action.id) {
               const existing = existingPrefs.find((p: any) => p.id === action.id);
               if (existing) {
@@ -176,6 +194,9 @@ Example JSON:
           console.error('[MemoryWorker] Failed to save to LanceDB', vectorErr);
         }
       }
+
+      // Invalidate cache after any memory extraction
+      await RedisCache.invalidateUserMemory(item.userId);
 
     } catch (llmErr) {
       console.error('[MemoryWorker] LLM Extraction Error:', llmErr);

@@ -82,6 +82,7 @@ model AgentMemory {
   id          String   @id @default(uuid())
   userId      String   
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  isGlobal    Boolean  @default(false)
   type        String   // 'SKILL', 'ERROR', 'PREFERENCE', 'RULE', 'BEHAVIOR', 'PROFILE'
   content     String   // The extracted memory text
   confidence  Int      @default(50) // Score from 0 to 100 for memory decay
@@ -100,6 +101,9 @@ model TokenLog {
   completionTokens Int @default(0)
   totalTokens Int      @default(0)
   
+  messageId   String?  // Links the token usage to a specific chat message
+  missionId   String?  // Links the token usage to a specific mission
+
   createdAt   DateTime @default(now())
 }
 

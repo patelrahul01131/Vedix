@@ -23,7 +23,7 @@ export async function getSemanticMemoryTable() {
       content: "dummy",
       source: "dummy",
       created_at: Date.now(),
-      vector: Array(1536).fill(0.0) 
+      vector: Array(2048).fill(0.0) 
     }]);
 
     const table = await db.openTable(tableName);

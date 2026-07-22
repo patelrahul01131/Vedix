@@ -23,10 +23,11 @@ export class AnalyzeImageTool extends Tool {
   };
 
   async execute(args: any): Promise<any> {
-    const { image_url, question } = args;
+    const image_url = args.image_url || args.url;
+    const question = args.question || "Describe this image in detail.";
 
     if (!image_url || !image_url.startsWith('http')) {
-      throw new Error("A valid image_url starting with http/https is required.");
+      throw new Error("A valid image_url (or url) starting with http/https is required.");
     }
 
     try {
@@ -45,14 +46,14 @@ export class AnalyzeImageTool extends Tool {
           if (image_url.includes('vedix-media')) {
             const s3 = new S3Client({
               region: 'us-east-1',
-              endpoint: process.env.MINIO_ENDPOINT || 'http://localhost:9000',
+              endpoint: (process.env.MINIO_ENDPOINT || 'http://127.0.0.1:9000').replace('localhost', '127.0.0.1'),
               credentials: {
                 accessKeyId: process.env.MINIO_ACCESS_KEY || 'minioadmin',
                 secretAccessKey: process.env.MINIO_SECRET_KEY || 'minioadmin',
               },
               forcePathStyle: true
             });
-            const urlObj = new URL(image_url);
+            const urlObj = new URL(image_url.replace('localhost', '127.0.0.1'));
             const pathParts = urlObj.pathname.split('/').filter(Boolean);
             const bucket = pathParts[0];
             const key = pathParts.slice(1).join('/');
@@ -78,11 +79,18 @@ export class AnalyzeImageTool extends Tool {
         }
       }
 
-      const enhancedQuestion = `You are a highly intelligent Vision AI. Look closely at the image provided. Answer the following user question about the image. 
-CRITICAL: If the user's question contains an obvious typo (e.g., asking about "bread" when the image clearly shows a dog "breed"), intelligently infer their true intent based on the visual content. Do NOT hallucinate objects that are not in the image.
+      const enhancedQuestion = `You are a highly intelligent Vision AI and expert recognition engine. Look closely at the image provided and answer the user's question.
+
+CRITICAL: If the user asks to identify a specific object, vehicle, or product, do NOT just describe it generically. Act as an expert identifier. Look for logos, specific geometry, headlights, frame types, and unique features.
+Structure your identification response to include:
+- Primary Identification (What is it?)
+- Confidence Score (e.g., 85%)
+- Visual Evidence (Why do you think this?)
+- Alternative Candidates (e.g., if it's 85% a Honda CB300R, could it be a Yamaha MT15?)
+
+If your confidence is below 60%, explicitly state that the image is too low-resolution or obscured, and suggest asking the user for a clearer image.
 
 User Question: ${question}`;
-
       const response = await axios.post(
         'https://api.mistral.ai/v1/chat/completions',
         {

@@ -120,9 +120,9 @@ export class MemoryCritic {
       return;
     }
 
-    // ── Pass 2: LLM security reviewer ──────────────────────────────────────
+    // ── Pass 2: LLM security reviewer & Global Validity Reviewer ───────────
     const memoriesList = needsLlmReview
-      .map((m: any) => `- ID: "${m.id}" | Content: "${m.content}"`)
+      .map((m: any) => `- ID: "${m.id}" | isGlobal: ${!!m.isGlobal} | Content: "${m.content}"`)
       .join('\n');
 
     const prompt = `You are a security reviewer for an AI agent's personal memory store.
@@ -144,11 +144,16 @@ REJECT if the content contains ANY of the following:
 APPROVE everything else — names, framework preferences, coding habits, project patterns,
 tool choices, professional context. These are safe and valuable.
 
+GLOBAL VALIDITY RULE:
+If a memory is proposed as \`isGlobal: true\`, but you determine it is a hack, a legacy workaround (e.g., dynamic imports to bypass CJS/ESM errors), or a highly specific testing strategy (e.g., simulating CORS requests manually), you must revoke the global status by returning \`"isGlobal": false\`.
+Only universally correct framework architectures should remain \`"isGlobal": true\`.
+For all memories, include the final \`isGlobal\` boolean in your response (pass through the original value if it doesn't need to be revoked).
+
 Memories to review:
 ${memoriesList}
 
 Return a JSON array ONLY with exactly ${needsLlmReview.length} entries, one per memory:
-[{"id":"<id>","decision":"APPROVED"},{"id":"<id>","decision":"REJECTED"}]`;
+[{"id":"<id>","decision":"APPROVED","isGlobal":true|false},{"id":"<id>","decision":"REJECTED","isGlobal":false}]`;
 
     try {
       const response = await this.gateway.generate({
@@ -164,7 +169,7 @@ Return a JSON array ONLY with exactly ${needsLlmReview.length} entries, one per 
         );
       }
 
-      let decisions: Array<{ id: string; decision: string }> = [];
+      let decisions: Array<{ id: string; decision: string; isGlobal?: boolean }> = [];
       try {
         let text = ((response as any).text || '').trim();
         if (text.startsWith('```json')) text = text.replace(/```json/g, '').replace(/```/g, '');
@@ -191,10 +196,17 @@ Return a JSON array ONLY with exactly ${needsLlmReview.length} entries, one per 
 
       // Bulk updates
       if (approvedIds.length > 0) {
-        await db.agentMemory.updateMany({
-          where: { id: { in: approvedIds }, status: 'PENDING' },
-          data: { status: 'APPROVED' },
-        });
+        // We use Promise.all here so we can apply the unique isGlobal flag to each memory
+        await Promise.all(
+          decisions
+            .filter(d => d.decision === 'APPROVED' && reviewedIds.includes(d.id))
+            .map(d =>
+              db.agentMemory.update({
+                where: { id: d.id },
+                data: { status: 'APPROVED', isGlobal: !!d.isGlobal },
+              })
+            )
+        );
         logger.info(`[MemoryCritic] APPROVED ${approvedIds.length} memories.`);
       }
 
