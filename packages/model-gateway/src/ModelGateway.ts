@@ -11,6 +11,28 @@ import { Tool } from '@vedix/tool-sdk';
 import { z, ZodTypeAny } from 'zod';
 
 // ────────────────────────────────────────────────────────────────────────────
+// Production resilience utilities
+// ────────────────────────────────────────────────────────────────────────────
+
+/**
+ * A custom fetch wrapper that enforces a specific timeout.
+ * Node.js (undici) defaults to a 5-minute body timeout, which can be exceeded 
+ * by complex LLM prompts with huge context windows.
+ */
+const fetchWithTimeout = async (url: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+  // 10-minute timeout for heavy LLM operations
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(new Error('LLM_TIMEOUT')), 600000);
+  
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return await fetch(url, { ...init, signal: controller.signal as any });
+  } finally {
+    clearTimeout(timeout);
+  }
+};
+
+// ────────────────────────────────────────────────────────────────────────────
 // Internal schema types
 // ────────────────────────────────────────────────────────────────────────────
 
@@ -126,7 +148,12 @@ export class ModelGateway {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private makeOpenAICompatProvider(baseURL: string, apiKey: string | undefined): any {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    return createOpenAI({ baseURL, apiKey, compatibility: 'compatible' } as any);
+    return createOpenAI({ 
+      baseURL, 
+      apiKey, 
+      compatibility: 'compatible',
+      fetch: fetchWithTimeout
+    } as any);
   }
 
   /**
@@ -180,6 +207,7 @@ export class ModelGateway {
         messages: options.messages,
         system: options.systemPrompt,
         tools: aiTools,
+        maxRetries: 2, // Production-grade retry logic for transient network issues
         onError: ({ error }: { error: unknown }) => {
           sdkError = error as Error;
         },
@@ -249,6 +277,10 @@ export class ModelGateway {
         errorMessage.includes('fetch failed')
       ) {
         throw new Error('Please check your internet connection. Unable to reach the AI provider.');
+      }
+
+      if (errorMessage.includes('LLM_TIMEOUT') || errorMessage.includes('UND_ERR_BODY_TIMEOUT') || errorMessage.includes('BodyTimeoutError')) {
+        throw new Error('LLM Generation Failed: The request timed out. The context window might be too large, or the provider is experiencing high latency.');
       }
 
       throw new Error(`LLM Generation Failed: ${errorMessage}`);
